@@ -41,6 +41,7 @@ int run_game(Game *game)
 
     int playing = 1;
 
+    Point *cursor = game->cursor;
     Input input;
     while (playing) {
         draw_field(game);
@@ -48,16 +49,16 @@ int run_game(Game *game)
             case NOTHING:
                 break;
             case UP:
-                game->cursor->y = (game->cursor->y - 1) % FIELD_HEIGHT;
+                cursor->y = (cursor->y ? cursor->y : FIELD_HEIGHT) - 1;
                 break;
             case DOWN:
-                game->cursor->y = (game->cursor->y + 1) % FIELD_HEIGHT;
+                cursor->y = (cursor->y + 1) % FIELD_HEIGHT;
                 break;
             case LEFT:
-                game->cursor->x = (game->cursor->x - 1) % FIELD_WIDTH;
+                cursor->x = (cursor->x ? cursor->x : FIELD_WIDTH) - 1;
                 break;
             case RIGHT:
-                game->cursor->x = (game->cursor->x + 1) % FIELD_WIDTH;
+                cursor->x = (cursor->x + 1) % FIELD_WIDTH;
                 break;
             case SPACE:
                 break;
