@@ -35,6 +35,7 @@ void draw_field(Game *game)
 
     SDL_WM_SetCaption(title, NULL);
 
+    clear_screen();
     draw_cursor(game);
 
     for (int i = 0; i < FIELD_WIDTH; ++i) {
@@ -48,7 +49,7 @@ void draw_field(Game *game)
         }
     }
 
-SDL_Flip(window);
+    SDL_Flip(window);
 }
 
 void clear_screen()
