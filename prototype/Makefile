@@ -1,4 +1,4 @@
-OBJ		:= main.o game.o window.o io.o
+OBJ		:= main.o game.o field.o window.o io.o
 CFLAGS	+= $(shell sdl-config --clfags)
 LDFLAGS	+= $(shell sdl-config --libs)
 
@@ -8,7 +8,10 @@ betegeld: $(OBJ)
 main.o: main.c game.h window.h
 	$(CC) -c $<
 
-game.o: game.c game.h window.h io.h types.h defaults.h
+game.o: game.c game.h field.h window.h io.h types.h defaults.h
+	$(CC) -c $<
+
+field.o: field.c field.h window.h types.h defaults.h
 	$(CC) -c $<
 
 window.o: window.c window.h io.h types.h defaults.h

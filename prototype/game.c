@@ -4,17 +4,7 @@ Game *game_init()
 {
     Game *game = malloc(sizeof(Game));
 
-    game->field = malloc(FIELD_WIDTH * sizeof(char *));
-
-    srand(time(NULL));
-
-    for (size_t i = 0; i < FIELD_WIDTH; ++i) {
-        game->field[i] = calloc(FIELD_HEIGHT, sizeof(char));
-        for (size_t j = 0; j < FIELD_HEIGHT; ++j) {
-            game->field[i][j] = rand() % 4;
-        }
-    }
-
+    game->field = new_field();
     game->cursor = malloc(sizeof(Point));
     game->cursor->x = FIELD_WIDTH / 2;
     game->cursor->y = FIELD_HEIGHT / 2;
@@ -26,13 +16,36 @@ Game *game_init()
 
 void free_game(Game *game)
 {
-    for (size_t i = 0; i < FIELD_WIDTH; ++i) {
-        free(game->field[i]);
-    }
-
     free(game->field);
     free(game->cursor);
     free(game);
+}
+
+int detect_row(char *field)
+{
+    return 0;
+}
+
+int search_match(Game *game)
+{
+    char *field = game->field;
+    for (int row = 0; row < FIELD_WIDTH * FIELD_HEIGHT; row += FIELD_WIDTH + 2) {
+        for (int col = 0; col < FIELD_WIDTH; ++col) {
+            char tile = field[row + col + 1];
+            int i = 1;
+            while (tile &= field[row + col + 1 + i]) {
+                ++i;
+            }
+            if (i >= 3) {
+                tile = field[row + col + 1];
+                i = 0;
+                while(tile &= field[row + col + 1 + i]) {
+                    field[row + col + 1 + i] |= 128; /* set most significant bit */
+                }
+            }
+        }
+    }
+    return 0;
 }
 
 int run_game(Game *game)

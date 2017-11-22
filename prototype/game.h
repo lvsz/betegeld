@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <time.h>
 
+#include "field.h"
 #include "window.h"
 #include "io.h"
 #include "types.h"

@@ -2,16 +2,14 @@
 
 static SDL_Surface *window;
 
-static Color colors[] = { RED
-                        , GREEN
-                        , BLUE
-                        , YELLOW
-                        };
-
-Uint32 get_color(Color color)
-{
-    return SDL_MapRGB(window->format, color.r, color.g, color.b);
-}
+#define BLACK  0x00000000
+#define WHITE  0xffffff00
+#define RED    0x0000ff00
+#define GREEN  0x00ff0000
+#define BLUE   0xff000000
+#define YELLOW 0x00eeff00
+#define ORANGE 0x0055ff00
+#define PURPLE 0xff00aa00
 
 void draw_cursor(Game *game)
 {
@@ -20,12 +18,12 @@ void draw_cursor(Game *game)
                            , TILE_SIZE
                            , TILE_SIZE
                            };
-    Color c = WHITE;
-    SDL_FillRect(window, &cursor_tile, get_color(c));
+    SDL_FillRect(window, &cursor_tile, WHITE);
 }
 
 void draw_field(Game *game)
 {
+    puts("begin drawing field");
     char title[TITLE_BUFFER];
     if (game->paused) {
         sprintf(title, "%s — paused", TITLE);
@@ -38,24 +36,51 @@ void draw_field(Game *game)
     clear_screen();
     draw_cursor(game);
 
-    for (int i = 0; i < FIELD_WIDTH; ++i) {
-        for (int j = 0; j < FIELD_HEIGHT; ++j) {
-            SDL_Rect tile = { 1 + i * TILE_SIZE
-                            , 1 + j * TILE_SIZE
+    for (int i = 0; i < FIELD_HEIGHT; ++i) {
+        for (int j = 0; j < FIELD_WIDTH; ++j) {
+            SDL_Rect tile = { 1 + j * TILE_SIZE
+                            , 1 + i * TILE_SIZE
                             , TILE_SIZE - 2
                             , TILE_SIZE - 2
                             };
-            SDL_FillRect(window, &tile, get_color(colors[game->field[i][j]]));
+            Uint32 color;
+            switch (game->field[(FIELD_WIDTH + 2) * (i + 1) + j + 1]) {
+                case WHITE_TILE:
+                    color = WHITE;
+                    break;
+                case RED_TILE:
+                    color = RED;
+                    break;
+                case GREEN_TILE:
+                    color = GREEN;
+                    break;
+                case BLUE_TILE:
+                    color = BLUE;
+                    break;
+                case YELLOW_TILE:
+                    color = YELLOW;
+                    break;
+                case ORANGE_TILE:
+                    color = ORANGE;
+                    break;
+                case PURPLE_TILE:
+                    color = PURPLE;
+                    break;
+                default:
+                    color = BLACK;
+                    break;
+            }
+            SDL_FillRect(window, &tile, color);
         }
     }
 
     SDL_Flip(window);
+    puts("finished drawing field");
 }
 
 void clear_screen()
 {
-    Color c = BLACK;
-    SDL_FillRect(window, NULL, get_color(c));
+    SDL_FillRect(window, NULL, BLACK);
 }
 
 void window_quit()
