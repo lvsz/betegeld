@@ -4,7 +4,7 @@ model FLAT, C
 assume cs:_TEXT,ds:FLAT,es:FLAT,fs:FLAT,gs:FLAT
 
 ; compile-time constants
-VMEMADR   equ offset _screenBuffer   ; video memory address
+VMEMADR   equ offset _screenBuffer   ; points to buffer, change to 0A0000h to skip
 SCRWIDTH  equ 320       ; screen witdth
 SCRHEIGHT equ 200       ; screen height
 TILESIZE  equ 20        ; tile size
@@ -112,13 +112,14 @@ proc updateBoard
     uses eax, ebx, ecx, edx
 
     call fillBackground, BLACK
+
     xor ebx, ebx
-    mov edx, offset _board + 11
+    mov edx, offset _board + 11 ; skip top 0-border
     @@outer_loop:
         xor ecx, ecx
         @@inner_loop:
-            bsf eax, [edx]
-            call drawTile,ecx,ebx,ax
+            bsf eax, [edx]  ; finds first set bit to determine tile color
+            call drawTile, ecx, ebx, ax
             inc ecx
             inc edx
             cmp ecx, BRDWIDTH
@@ -133,10 +134,10 @@ endp updateBoard
 proc updateCursor
     uses eax, ecx, edx, edi
 
-    movzx eax, [byte ptr offset _cursorPos + 1]
+    movzx eax, [byte ptr offset _cursorPos + 1] ; gets cursor y position
     mov edx, SCRWIDTH
     mul edx
-    add al, [byte ptr offset _cursorPos]
+    add al, [byte ptr offset _cursorPos ; adds cursor x position
     mov edx, TILESIZE
     mul edx
     add eax, BRDY0 * SCRWIDTH + BRDX0
@@ -169,13 +170,14 @@ proc updateCursor
     ret
 endp updateCursor
 
+; not used, needs to be changed to something with a seed to be useable
 proc randColor
     push ebp
     mov ebp, esp
 
     push edx
     push ecx
-    mov ah, 2Ch
+    mov ah, 2Ch     ; gets current time
     int 21h
     xor dx, cx
     movzx eax, dx
@@ -191,6 +193,12 @@ proc randColor
     ret
 endp randColor
 
+proc updateGame
+    call updateBoard
+    call updateCursor
+    ret
+endp updateGame
+
 proc drawGame
     uses ecx, edx, edi, esi
 
@@ -205,18 +213,12 @@ proc drawGame
         jz  @@waitVBlank_wait2
 
     mov esi, offset _screenBuffer
-    mov edi, 0A0000h                ; video memory
+    mov edi, 0A0000h                ; video memory address
     mov ecx, SCRWIDTH * SCRHEIGHT / 4
     rep movsd
 
     ret
 endp drawGame
-
-proc updateGame
-    call updateBoard
-    call updateCursor
-    ret
-endp updateGame
 
 proc procesUserInput
     uses ebx, edx
@@ -301,10 +303,6 @@ proc main
         cmp al, 0
         jz  @@main_loop
 
-    ; mov ah, 00h
-    ; int 16h
-    ; (replace by) call waitForSpecificKeystroke, 001Bh ; keycode for ESC
-
     call terminateProcess
 endp main
 
@@ -315,6 +313,9 @@ dataseg
     _cursorPos db BRDWIDTH / 2 - 1
                db BRDHEIGHT / 2 - 1
 
+    ; active tiles are all powers of two
+    ; this allows efficient match checking with bitwise-and
+    ; 0-borders unnecessitates bounds checking
     _board db 0,  0,  0,  0,  0,  0,  0,  0,  0, 0 ; row 0
            db 0,  2,  2,  4,  4, 16,  4,  1,  4, 0 ; row 1
            db 0, 64, 32, 16,  1, 16, 32,  8, 32, 0 ; row 2
