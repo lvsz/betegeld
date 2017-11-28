@@ -114,7 +114,7 @@ proc updateBoard
     call fillBackground, BLACK
 
     xor ebx, ebx
-    mov edx, offset _board + 11 ; skip top 0-border
+    mov edx, offset _board + BRDWIDTH + 3 ; skip top 0-border
     @@outer_loop:
         xor ecx, ecx
         @@inner_loop:
@@ -137,7 +137,7 @@ proc updateCursor
     movzx eax, [byte ptr offset _cursorPos + 1] ; gets cursor y position
     mov edx, SCRWIDTH
     mul edx
-    add al, [byte ptr offset _cursorPos ; adds cursor x position
+    add al, [byte ptr offset _cursorPos] ; adds cursor x position
     mov edx, TILESIZE
     mul edx
     add eax, BRDY0 * SCRWIDTH + BRDX0
@@ -241,7 +241,7 @@ proc procesUserInput
     mov bx, BRDHEIGHT
     div bx
     mov [byte ptr offset _cursorPos + 1], dl
-    jmp @@input_skip_4
+    jmp @@input_skip_rest
 
     @@input_skip_1:
         cmp ah, 050h    ; down
@@ -251,7 +251,7 @@ proc procesUserInput
         mov bx, BRDHEIGHT
         div bx
         mov [byte ptr offset _cursorPos + 1], dl
-        jmp @@input_skip_4
+        jmp @@input_skip_rest
 
     @@input_skip_2:
         cmp ah, 04Bh    ; left
@@ -261,7 +261,7 @@ proc procesUserInput
         mov bx, BRDWIDTH
         div bx
         mov [byte ptr offset _cursorPos], dl
-        jmp @@input_skip_4
+        jmp @@input_skip_rest
 
     @@input_skip_3:
         cmp ah, 04Dh    ; right
@@ -273,15 +273,20 @@ proc procesUserInput
         mov [byte ptr offset _cursorPos], dl
 
     @@input_skip_4:
-    xor al, al
-    ret
+        cmp ah, 039h    ; space
+        jnz @@input_skip_5
+
+    @@input_skip_5:
+    @@input_skip_rest:
+        xor al, al
+        ret
 endp procesUserInput
 
 ; Terminate the program.
 proc terminateProcess
     uses eax
     call setVideoMode, 03h
-    mov ax,04C00h
+    mov ax, 04C00h
     int 21h
     ret
 endp terminateProcess
