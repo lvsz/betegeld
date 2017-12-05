@@ -3,7 +3,7 @@
 # =============================================================================
 
 # Settings - Edit the names of the object and executable files.
-objects1 = main.obj
+objs = mouse.obj keyb.obj main.obj
 dest = main.exe
 
 # =============================================================================
@@ -11,16 +11,16 @@ dest = main.exe
 # =============================================================================
 .asm.obj
   # use TASM with debug info (stripped anyway by wlink if not used)
-  tasm /ml /m2 /w2 /z /zi $<
+  tasm /ml /m2 /w2 /z /zi /p /jIDEAL $<
 
-$(dest): $(objects1)
-  wlink option quiet system pmodew name $@ file {$(objects1)}
+$(dest): $(objs)
+  wlink option quiet system pmodew name $@ file {$(objs)}
 
 clean: .symbolic
   del *.obj
   del $(dest)
 
 .silent
-debug: $(objects1) .symbolic
-  wlink debug watcom all option quiet system pmodew name $(dest) file {$(objects1)}
+debug: $(objs) .symbolic
+  wlink debug watcom all option quiet system pmodew name $(dest) file {$(objs)}
   wd /tr=rsi /li=43 $(dest)

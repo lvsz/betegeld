@@ -3,6 +3,9 @@ P386
 model FLAT, C
 assume cs:_TEXT,ds:FLAT,es:FLAT,fs:FLAT,gs:FLAT
 
+include "keyb.inc"
+include "mouse.inc"
+
 ; compile-time constants
 VMEMADR   equ offset _screenBuffer   ; points to buffer, change to 0A0000h to skip
 SCRWIDTH  equ 320       ; screen witdth
@@ -24,6 +27,11 @@ PURPLE    equ 5
 PINK      equ 6
 BLACK     equ 7
 WHITE     equ 8
+
+MOVEUP   equ 0:-1
+MOVEDOWN equ 0:1
+MOVELEFT equ -1:0
+MOVERIGHT equ 1:0
 
 
 ; -------------------------------------------------------------------
@@ -131,13 +139,14 @@ proc updateBoard
     ret
 endp updateBoard
 
-proc updateCursor
+proc drawCursor
+    arg @@cursor_x: byte, @@cursor_y: byte
     uses eax, ecx, edx, edi
 
-    movzx eax, [byte ptr offset _cursorPos + 1] ; gets cursor y position
+    movzx eax, [@@cursor_y] ; gets cursor y position
     mov edx, SCRWIDTH
     mul edx
-    add al, [byte ptr offset _cursorPos] ; adds cursor x position
+    add al, [@@cursor_x] ; adds cursor x position
     mov edx, TILESIZE
     mul edx
     add eax, BRDY0 * SCRWIDTH + BRDX0
@@ -168,7 +177,7 @@ proc updateCursor
     mov ecx, TILESIZE
     rep stosb
     ret
-endp updateCursor
+endp drawCursor
 
 ; not used, needs to be changed to something with a seed to be useable
 proc randColor
@@ -194,8 +203,11 @@ proc randColor
 endp randColor
 
 proc updateGame
+    uses eax, ebx
     call updateBoard
-    call updateCursor
+    movzx eax, [byte ptr _cursorPos]
+    movzx ebx, [byte ptr _cursorPos + 1]
+    call drawCursor, eax, ebx
     ret
 endp updateGame
 
@@ -220,7 +232,7 @@ proc drawGame
     ret
 endp drawGame
 
-proc procesUserInput
+proc processUserInput
     uses ebx, edx
 
     xor edx, edx    ; emptying for later
@@ -229,58 +241,27 @@ proc procesUserInput
     xor eax, eax    ; == mov ah, 0
     int 16h         ; keyboard interupt
     cmp ah, 01h     ; ESC scan code
-    jnz @@continue_game
+    jnz @@continue_game_1
     ret
-    @@continue_game:
+    @@continue_game_1:
 
+    cmp ah, 039h    ; SPACE scan code
+    jnz @@continue_game_2
+    mov [byte ptr _moveMode], 1
+
+
+    @@continue_game_2:
     ; check for cursor movements
-    cmp ah, 048h        ; up
-    jnz @@input_skip_1
-    movzx ax, [byte ptr offset _cursorPos + 1]
-    dec ax
-    mov bx, BRDHEIGHT
-    div bx
-    mov [byte ptr offset _cursorPos + 1], dl
-    jmp @@input_skip_rest
+    movzx edx, ah
+    mov ax, [word ptr offset _cursorPos]
+    add ax, [word ptr _moves + edx + edx]
+    or  ax, 1111100011111000b
+    xor ax, 1111100011111000b
+    mov [word ptr offset _cursorPos], ax
 
-    @@input_skip_1:
-        cmp ah, 050h    ; down
-        jnz @@input_skip_2
-        movzx ax, [byte ptr offset _cursorPos + 1]
-        inc ax
-        mov bx, BRDHEIGHT
-        div bx
-        mov [byte ptr offset _cursorPos + 1], dl
-        jmp @@input_skip_rest
-
-    @@input_skip_2:
-        cmp ah, 04Bh    ; left
-        jnz @@input_skip_3
-        movzx ax, [byte ptr offset _cursorPos]
-        dec ax
-        mov bx, BRDWIDTH
-        div bx
-        mov [byte ptr offset _cursorPos], dl
-        jmp @@input_skip_rest
-
-    @@input_skip_3:
-        cmp ah, 04Dh    ; right
-        jnz @@input_skip_4
-        movzx ax, [byte ptr offset _cursorPos]
-        inc ax
-        mov bx, BRDWIDTH
-        div bx
-        mov [byte ptr offset _cursorPos], dl
-
-    @@input_skip_4:
-        cmp ah, 039h    ; space
-        jnz @@input_skip_5
-
-    @@input_skip_5:
-    @@input_skip_rest:
-        xor al, al
-        ret
-endp procesUserInput
+    xor al, al
+    ret
+endp processUserInput
 
 ; Terminate the program.
 proc terminateProcess
@@ -304,7 +285,7 @@ proc main
     @@main_loop:
         call updateGame
         call drawGame
-        call procesUserInput ; returns al > 0 for exit
+        call processUserInput ; returns al > 0 for exit
         cmp al, 0
         jz  @@main_loop
 
@@ -341,6 +322,17 @@ dataseg
              db 0FFh, 0DFh, 0EEh ; 06 pink
              db 000h, 000h, 000h ; 07 black
              db 0FFh, 0FFh, 0FFh ; 08 white
+
+    _moves  dw 72 dup (?)
+            dw 0ff00h
+            dw 2 dup (?)
+            dw 0ffffh
+            dw (?)
+            dw 00001h
+            dw 2 dup (?)
+            dw 00100h
+
+    _moveMode db 0
 
 ; -------------------------------------------------------------------
 ; STACK
