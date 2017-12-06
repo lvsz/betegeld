@@ -7,8 +7,8 @@ include "keyb.inc"
 include "mouse.inc"
 
 ; compile-time constants
-VMEMADR   equ offset _screenBuffer   ; points to buffer, change to 0A0000h to skip
-SCRWIDTH  equ 320       ; screen witdth
+VMEMADR   equ offset _screenBuffer  ; change to 0A0000h to skip buffer
+SCRWIDTH  equ 320       ; screen width
 SCRHEIGHT equ 200       ; screen height
 TILESIZE  equ 20        ; tile size
 BRDWIDTH  equ 8         ; number of tiles that fit in a board's row
@@ -204,7 +204,7 @@ proc drawGame
         and al, 01000b              ; test bit 3
         jz  @@waitVBlank_wait2
 
-    mov     esi, offset _screenBuffer
+    mov     esi, VMEMADR
     mov     edi, 0A0000h            ; video memory address
     mov     ecx, SCRWIDTH * SCRHEIGHT / 4
     rep     movsd
@@ -288,37 +288,38 @@ dataseg
     ; this allows efficient match checking with bitwise-and
     ; 0-borders unnecessitates bounds checking
     _board \
-        db  0,  0,  0,  0,  0,  0,  0,  0,  0, 0 ; row 0
-        db  0,  2,  2,  4,  4, 16,  4,  1,  4, 0 ; row 1
-        db  0, 64, 32, 16,  1, 16, 32,  8, 32, 0 ; row 2
-        db  0,  2,  4,  1,  2, 32, 16,  1, 64, 0 ; row 3
-        db  0,  4,  2, 32,  4,  2,  1,  8,  2, 0 ; row 4
-        db  0, 64,  8,  4, 16, 16,  4, 32,  4, 0 ; row 5
-        db  0,  8,  4, 64, 32, 64, 64, 16,  1, 0 ; row 6
-        db  0,  4,  4,  1,  8, 32, 16,  8,  1, 0 ; row 7
-        db  0, 64, 64,  4, 16, 16, 64,  1, 64, 0 ; row 8
-        db  0,  0,  0,  0,  0,  0,  0,  0,  0, 0 ; row 9
+        db  0,  0,  0,  0,  0,  0,  0,  0,  0, 0    ; row 0
+        db  0,  2,  2,  4,  4, 16,  4,  1,  4, 0    ; row 1
+        db  0, 64, 32, 16,  1, 16, 32,  8, 32, 0    ; row 2
+        db  0,  2,  4,  1,  2, 32, 16,  1, 64, 0    ; row 3
+        db  0,  4,  2, 32,  4,  2,  1,  8,  2, 0    ; row 4
+        db  0, 64,  8,  4, 16, 16,  4, 32,  4, 0    ; row 5
+        db  0,  8,  4, 64, 32, 64, 64, 16,  1, 0    ; row 6
+        db  0,  4,  4,  1,  8, 32, 16,  8,  1, 0    ; row 7
+        db  0, 64, 64,  4, 16, 16, 64,  1, 64, 0    ; row 8
+        db  0,  0,  0,  0,  0,  0,  0,  0,  0, 0    ; row 9
 
     _palette \
-        db  0FFh, 000h, 000h ; 00 red
-        db  000h, 0FFh, 000h ; 01 green
-        db  000h, 000h, 0FFh ; 02 blue
-        db  0FFh, 0FFh, 000h ; 03 yellow
-        db  0FFh, 0A5h, 000h ; 04 orange
-        db  000h, 0FFh, 0FFh ; 05 purple
-        db  0FFh, 0DFh, 0EEh ; 06 pink
-        db  000h, 000h, 000h ; 07 black
-        db  0FFh, 0FFh, 0FFh ; 08 white
+        db  0FFh, 000h, 000h    ; 00 red
+        db  000h, 0FFh, 000h    ; 01 green
+        db  000h, 000h, 0FFh    ; 02 blue
+        db  0FFh, 0FFh, 000h    ; 03 yellow
+        db  0FFh, 0A5h, 000h    ; 04 orange
+        db  000h, 0FFh, 0FFh    ; 05 purple
+        db  0FFh, 0DFh, 0EEh    ; 06 pink
+        db  000h, 000h, 000h    ; 07 black
+        db  0FFh, 0FFh, 0FFh    ; 08 white
 
+    ; indices based on keyboard scan codes
     _moves \
         dw  72 dup (?)
-        dw  0ff00h
+        dw  0ff00h      ; move up
         dw  2 dup (?)
-        dw  0ffffh
+        dw  0ffffh      ; move left
         dw  (?)
-        dw  00001h
+        dw  00001h      ; move right
         dw  2 dup (?)
-        dw  00100h
+        dw  00100h      ; move down
 
     _moveMode \
         db 0
