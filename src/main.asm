@@ -236,14 +236,12 @@ proc processUserInput
         movzx   edx, ah
         mov     ax, [word ptr offset _cursorPos]
         add     ax, [word ptr _moves + edx + edx]
-        or      ax, 1111100011111000b
-        xor     ax, 1111100011111000b
+        and     ax, 0707h
         mov     [word ptr offset _cursorPos], ax
 
     xor al, al
     ret
 endp processUserInput
-
 
 ; Terminate the program.
 proc terminateProcess
