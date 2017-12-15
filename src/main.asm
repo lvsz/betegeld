@@ -121,7 +121,7 @@ proc updateBoard
     call    fillBackground, BLACK
 
     xor     ebx, ebx
-    mov     edx, offset _board + BRDWIDTH + 3 ; skip top 0-border
+    mov     edx, offset _board
     @@outer_loop:
         xor     ecx, ecx
         @@inner_loop:
@@ -132,7 +132,6 @@ proc updateBoard
             cmp     ecx, BRDWIDTH
             jl      @@inner_loop
         inc     ebx
-        add     edx, 2
         cmp     ebx, BRDHEIGHT
         jl      @@outer_loop
     ret
@@ -243,6 +242,66 @@ proc processUserInput
     ret
 endp processUserInput
 
+
+proc matchRows
+    uses    ecx, edx, edi, esi
+
+    mov     esi, offset _board
+    mov     edi, offset _board + 1
+    mov     edx, BRDWIDTH   ; edx is #tiles remaining in row before matching
+    mov     ecx, edx        ; ecx is #tiles remaining in row after matching
+
+    @@loop:
+        repe    cmpsb       ; repeat while tile is equal to previous tile
+                            ; changes values of ecx, esi & edi
+        sub     edx, ecx    ; result is length of match found
+        cmp     edx, 3      ; match needs to be length 3 or more
+        jge     @@match
+
+        cmp     ecx, 3      ; ecx is number of remaining tiles in row
+        jl      @@next_row  ; if ecx < 3, no match possible, so go to next row
+        mov     edx, ecx    ; else update edx to ecx to continue search
+        jmp     @@loop
+
+        @@match:
+            push    esi         ; save esi
+            push    edi         ; save edi
+            dec     esi         ; move esi to last matching tile
+            xchg    ecx, edx    ; save ecx in edx & put #tiles remaining in ecx
+
+            ; set edi to equivalent position in _matches array
+            lea     edi, [offset _matches + esi - offset _board]
+
+            std             ; set direction flag to move over string backwards
+            rep     movsb   ; copies the matching tiles from _board to _matches
+            cld             ; clear direction flag
+
+            ; restore values to continue loop
+            mov     ecx, edx
+            pop     edi
+            pop     esi
+            jmp     @@loop
+
+        @@next_row:
+            add     esi, ecx        ; add #tiles remaining to current
+            add     edi, ecx        ; position to move to next row
+            cmp     esi, offset _board + (BRDWIDTH * BRDHEIGHT)
+            jge     @@done          ; done if current position is out of bounds
+            mov     edx, BRDWIDTH   ; else reset ecx & edx and continue loop
+            mov     ecx, edx
+            jmp     @@loop
+
+        @@done:
+            ret
+endp matchRows
+
+
+proc findMatch
+    call matchRows
+    ret
+endp findMatch
+
+
 ; Terminate the program.
 proc terminateProcess
     uses    eax
@@ -264,6 +323,7 @@ proc main
     call    updateColourPalette
 
     @@main_loop:
+        call    findMatch
         call    updateGame
         call    drawGame
         call    processUserInput    ; returns al > 0 for exit
@@ -282,20 +342,21 @@ dataseg
         db  BRDWIDTH / 2 - 1
         db  BRDHEIGHT / 2 - 1
 
-    ; active tiles are all powers of two
-    ; this allows efficient match checking with bitwise-and
-    ; 0-borders unnecessitates bounds checking
     _board \
-        db  0,  0,  0,  0,  0,  0,  0,  0,  0, 0    ; row 0
-        db  0,  2,  2,  4,  4, 16,  4,  1,  4, 0    ; row 1
-        db  0, 64, 32, 16,  1, 16, 32,  8, 32, 0    ; row 2
-        db  0,  2,  4,  1,  2, 32, 16,  1, 64, 0    ; row 3
-        db  0,  4,  2, 32,  4,  2,  1,  8,  2, 0    ; row 4
-        db  0, 64,  8,  4, 16, 16,  4, 32,  4, 0    ; row 5
-        db  0,  8,  4, 64, 32, 64, 64, 16,  1, 0    ; row 6
-        db  0,  4,  4,  1,  8, 32, 16,  8,  1, 0    ; row 7
-        db  0, 64, 64,  4, 16, 16, 64,  1, 64, 0    ; row 8
-        db  0,  0,  0,  0,  0,  0,  0,  0,  0, 0    ; row 9
+        db   2,  2,  2,  4, 32, 64, 64, 64  ; row 0
+        db  64, 64, 32, 16, 16, 32,  8, 32  ; row 1
+        db   4,  4,  4,  2, 32,  2,  2,  2  ; row 2
+        db   2,  2,  8,  4,  4,  1,  8,  2  ; row 3
+        db  64,  8,  4, 16, 16, 16, 16, 16  ; row 4
+        db   8,  4, 64, 64, 64, 64,  4,  4  ; row 5
+        db   4,  4,  4,  4, 32, 16,  8,  1  ; row 6
+        db  64, 64, 64, 64, 64, 64,  1,  8  ; row 7
+
+    _matches \
+        db  (BRDWIDTH * BRDHEIGHT) dup (0)
+
+    _score \
+        dd  0
 
     _palette \
         db  0FFh, 000h, 000h    ; 00 red
