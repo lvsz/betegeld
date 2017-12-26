@@ -211,6 +211,123 @@ proc drawGame
     ret
 endp drawGame
 
+;Call with a point (x:y), 
+;returns absolute address of its position on the board in eax.
+proc getBoardPosition
+	arg		@@point: word
+	uses	edx
+	
+	movzx   eax, [byte ptr @@point + 1]		; gets point's y position
+    mov     edx, BRDWIDTH					; switch to one-dimensional view
+    mul     edx
+    add     al, [byte ptr @@point]			; adds point's x position
+	add		eax, offset _board				; adds board's offset
+	ret
+endp getBoardPosition
+
+;Call with the point (x:y) of the selected tile
+proc switchTiles
+	arg		@@selectedTile: word
+	uses	eax, ebx, edx
+	
+	call	getBoardPosition, [@@selectedTile]
+	mov		ebx, eax								; remember its position
+	mov		dl, [eax]								; and its value
+	call	getBoardPosition, [word ptr _cursorPos]
+	mov 	dh, [eax]								; and the other value
+	mov		[eax], dl								; swap
+	mov		[ebx], dh
+	
+	
+	ret
+endp switchTiles
+
+proc printInt
+	arg		@@int:dword
+	uses	eax, edx
+	
+	xor 	edx, edx
+	mov		eax, [@@int]
+	push 	eax
+	
+@@loop:
+			
+	div		[dword 10]
+	push	edx
+	cmp		eax, 0
+	jne		@@loop
+
+@@loop2:
+	pop		edx
+	
+	mov     ah, 2h
+    add     edx, 48
+    int     21h
+	
+	sub 	edx, 48
+	cmp 	edx, [@@int]
+	jne		@@loop2
+
+	ret
+endp printInt
+
+
+PROC mouseHandler
+    uses	eax, ebx, ecx, edx
+	
+	;Ik wil hier de absolute muiscoördinaten omzetten naar cursorPosities,
+	;en zo de cursor updaten wanneer de muis beweegt.
+	;Ik gebruik de BRDX0 en BRDY0 als offsets om het veld te vinden in het scherm.
+	;Alles buiten het veld is voorlopig niet nuttig.
+	
+	;Dit komt van hun code, dient om te checken welke knop(pen) ingedrukt zijn.
+	;and	bl, 3							; check for two mouse buttons (2 low end bits)
+	;jz		@@skipit						; only execute if a mousebutton is pressed
+		
+@@inField:			
+	
+	;Hier zou ik willen die offset van de muiscoördinaat halen, en tergelijk
+	;checken of hij dan in het veld ligt, door te kijken of sub onder nul gaat of overflowt.
+	
+	; sub		cx, BRDX0					; overflows if too small
+	; jo		@@notInField				; is signed if not in field
+	; cmp		cx, BRDWIDTH * TILESIZE			
+	; jg		@@notInField
+	; call 	printInt, edx
+	
+	;Momenteel gebruik ik een simpele compare.
+	cmp 	dx, BRDY0						; Is mouseY lower than BRDY0
+	jl		@@notInField					; If so, don't bother
+		
+	sub		dx, BRDY0						; Switch absolute mouseY to relative y
+	
+	cmp		cx, BRDX0						; Same for mouseX, with the addition
+	jl		@@notInField					; of checking for the right side margin
+	cmp		cx, SCRWIDTH - BRDX0			
+	jg		@@notInField
+	sub		cx, BRDX0
+	
+	movzx	eax, cx							; Change absolute x position to tilesized positions
+	div		[byte TILESIZE]					; By dividing the width (amount of pixels) by the width of a tile
+	movzx	ecx, al							; put it in ecx for safekeeping
+			
+    movzx	eax, dx							; Do the same for y
+	div		[byte TILESIZE]					; 
+	mov		ch, al							; Put it in the other part of cx
+	mov		[word ptr _cursorPos], cx		; Update _cursorPos with cx
+	
+	;Probleem lijkt mij de mapping van pixelcoördinaten naar tegelcoördinaten,
+	;Maar ik zie al de hele namiddag niet wat ik verkeerd doe.
+	
+	;Hier call ik deze dingen zodat de cursor live geüpdated wordt.
+	call 	updateGame
+	call 	drawGame
+	ret
+	
+@@notInField:
+    ret
+ENDP mouseHandler
+
 
 proc processUserInput
     uses    ebx, edx
@@ -219,7 +336,7 @@ proc processUserInput
     xor     ebx, ebx    ; emptying for later
 
     xor     eax, eax    ; == mov ah, 0
-    int     16h         ; keyboard interupt
+    int     16h         ; keyboard interrupt
 
     cmp     ah, 01h     ; ESC scan code
     jnz     @@continue_game_1
@@ -305,9 +422,11 @@ endp findMatch
 ; Terminate the program.
 proc terminateProcess
     uses    eax
+	
     call    setVideoMode, 03h
     mov     ax, 04C00h
     int     21h
+	
     ret
 endp terminateProcess
 
@@ -321,6 +440,7 @@ proc main
 
     call    setVideoMode, 13h
     call    updateColourPalette
+	call	mouse_install, offset mouseHandler
 
     @@main_loop:
         call    findMatch
@@ -329,7 +449,10 @@ proc main
         call    processUserInput    ; returns al > 0 for exit
         cmp     al, 0
         jz      @@main_loop
+		
+	
 
+	call	mouse_uninstall
     call    terminateProcess
 endp main
 
@@ -337,7 +460,13 @@ endp main
 dataseg
     _screenBuffer \
         db  (SCRWIDTH * SCRHEIGHT) dup (?)
-
+		
+	_test \
+		db 1
+		db 1
+	msg_no_mouse \
+		db 'Hij komt hier wel é', 0dh, 0ah, '$'
+		
     _cursorPos \
         db  BRDWIDTH / 2 - 1
         db  BRDHEIGHT / 2 - 1
