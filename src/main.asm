@@ -184,6 +184,12 @@ proc updateGame
     call    updateBoard
     movzx   eax, [word ptr _cursorPos]
     call    drawCursor, eax
+	cmp 	[byte ptr _moveMode], 1			; switching mode, a tile is selected
+	jne		@@nothing_selected
+	movzx   eax, [word ptr _selectedTile]
+    call    drawCursor, eax
+	
+	@@nothing_selected:
     ret
 endp updateGame
 
@@ -272,62 +278,68 @@ proc printInt
 endp printInt
 
 
-PROC mouseHandler
-    uses	eax, ebx, ecx, edx
-	
-	;Ik wil hier de absolute muiscoördinaten omzetten naar cursorPosities,
-	;en zo de cursor updaten wanneer de muis beweegt.
-	;Ik gebruik de BRDX0 en BRDY0 als offsets om het veld te vinden in het scherm.
-	;Alles buiten het veld is voorlopig niet nuttig.
-	
-	;Dit komt van hun code, dient om te checken welke knop(pen) ingedrukt zijn.
-	;and	bl, 3							; check for two mouse buttons (2 low end bits)
-	;jz		@@skipit						; only execute if a mousebutton is pressed
+proc mouseHandler
+    uses    eax, ebx, ecx, edx
+
+	movzx   eax, dx        			; copy absolute Y position
+	cmp     eax, BRDY0				
+	jl      @@notInField   			; skip if above field
+	cmp     eax, BRDY0 + BRDHEIGHT * TILESIZE
+	jge     @@notInField    		; skip if below field
+				
+	sar     cx, 1           		; need to halve absolute X position
+	cmp     cx, BRDX0				
+	jl      @@notInField    		; skip if left of field
+	cmp     cx, BRDX0 + BRDWIDTH * TILESIZE
+	jge     @@notInField    		; skip if right of field
+
+	push 	bx						; save button state until after cursor move
+									; can't save it before checks, 
+									; otherwise stack messes up when mouse goes out of bounds
+	sub     eax, BRDY0
+	xor     edx, edx
+	mov     ebx, TILESIZE
+	div     ebx
+	mov     [byte ptr _cursorPos + 1], al   ; saves relative Y position
+	mov     ax, cx
+	sub     ax, BRDX0
+	xor     edx, edx
+	div     ebx
+	mov     [byte ptr _cursorPos], al       ; saves relative X position
+
+	pop 	bx
+	cmp		bl, 1					; left-click?
+	jl 		@@noClick				; 0
+	jz 		@@switchOrSelectTile	; 1, so left-click
+	mov     [byte ptr _moveMode], 0 ; else, deselect
+	jmp		@@noClick
 		
-@@inField:			
-	
-	;Hier zou ik willen die offset van de muiscoördinaat halen, en tergelijk
-	;checken of hij dan in het veld ligt, door te kijken of sub onder nul gaat of overflowt.
-	
-	; sub		cx, BRDX0					; overflows if too small
-	; jo		@@notInField				; is signed if not in field
-	; cmp		cx, BRDWIDTH * TILESIZE			
-	; jg		@@notInField
-	; call 	printInt, edx
-	
-	;Momenteel gebruik ik een simpele compare.
-	cmp 	dx, BRDY0						; Is mouseY lower than BRDY0
-	jl		@@notInField					; If so, don't bother
+	@@switchOrSelectTile:
+		cmp 	[byte ptr _moveMode], 1 
+		jnz		@@select
+		call	switchTiles, [word ptr _selectedTile]
+		mov     [byte ptr _moveMode], 0
+		jmp 	@@noClick
 		
-	sub		dx, BRDY0						; Switch absolute mouseY to relative y
+	@@select:
+		call 	selectTile
+		mov     [byte ptr _moveMode], 1
 	
-	cmp		cx, BRDX0						; Same for mouseX, with the addition
-	jl		@@notInField					; of checking for the right side margin
-	cmp		cx, SCRWIDTH - BRDX0			
-	jg		@@notInField
-	sub		cx, BRDX0
-	
-	movzx	eax, cx							; Change absolute x position to tilesized positions
-	div		[byte TILESIZE]					; By dividing the width (amount of pixels) by the width of a tile
-	movzx	ecx, al							; put it in ecx for safekeeping
-			
-    movzx	eax, dx							; Do the same for y
-	div		[byte TILESIZE]					; 
-	mov		ch, al							; Put it in the other part of cx
-	mov		[word ptr _cursorPos], cx		; Update _cursorPos with cx
-	
-	;Probleem lijkt mij de mapping van pixelcoördinaten naar tegelcoördinaten,
-	;Maar ik zie al de hele namiddag niet wat ik verkeerd doe.
-	
-	;Hier call ik deze dingen zodat de cursor live geüpdated wordt.
-	call 	updateGame
-	call 	drawGame
-	ret
-	
-@@notInField:
-    ret
+	@@noClick:
+		call    updateGame  			; not sure why I have to call these here
+		call    drawGame    			; but currently doesn't function without
+
+    @@notInField:
+        ret
 ENDP mouseHandler
 
+proc selectTile 
+; select the current cursor position
+	uses 	eax
+	mov     ax, [word ptr offset _cursorPos]
+	mov 	[word ptr _selectedTile], ax
+	ret
+endp selectTile
 
 proc processUserInput
     uses    ebx, edx
@@ -343,10 +355,19 @@ proc processUserInput
     ret
 
     @@continue_game_1:
-        cmp     ah, 039h    ; SPACE scan code
+        cmp     ah, 039h    			; SPACE scan code
         jnz     @@continue_game_2
-        mov     [byte ptr _moveMode], 1
+		cmp		[byte ptr _moveMode], 1 ; if _moveMode == 1 (switching) then space switches
+		jnz 	@@selecting_tile		; if _moveMode == 0 (selecting) then space selects
+		call	switchTiles, [word ptr _selectedTile]
+		mov     [byte ptr _moveMode], 0 ; set _moveMode to selecting mode
+		jmp		@@continue_game_2
+		
+		@@selecting_tile:				; select the current cursor position
+			call 	selectTile
+			mov     [byte ptr _moveMode], 1 ; set _moveMode to switching mode
 
+		
     @@continue_game_2:
         ; check for cursor movements
         movzx   edx, ah
@@ -366,7 +387,7 @@ proc matchRows
     mov     esi, offset _board
     mov     edi, offset _board + 1
     mov     edx, BRDWIDTH   ; edx is #tiles remaining in row before matching
-    mov     ecx, edx        ; ecx is #tiles remaining in row after matching
+    mov     ecx, edx        ; ecx is #tiles remaining in row after  matching
 
     @@loop:
         repe    cmpsb       ; repeat while tile is equal to previous tile
@@ -430,6 +451,18 @@ proc terminateProcess
     ret
 endp terminateProcess
 
+proc waitForSpecificKeystroke
+	ARG 	@@key:byte
+	USES 	eax
+
+	@@waitForKeystroke:
+		mov	ah,00h
+		int	16h
+		cmp	al,[@@key]
+	jne	@@waitForKeystroke
+
+	ret
+endp waitForSpecificKeystroke
 
 proc main
     sti
@@ -438,6 +471,16 @@ proc main
     push    ds
     pop     es
 
+	call mouse_present
+    cmp eax, 1
+    je @@mouse_present
+
+    mov ah, 9
+    mov edx, offset msg_no_mouse
+    int 21h
+
+    @@mouse_present:
+	
     call    setVideoMode, 13h
     call    updateColourPalette
 	call	mouse_install, offset mouseHandler
@@ -451,7 +494,7 @@ proc main
         jz      @@main_loop
 		
 	
-
+	; call	waitForSpecificKeystroke, 001Bh ; keycode for ESC
 	call	mouse_uninstall
     call    terminateProcess
 endp main
@@ -470,6 +513,10 @@ dataseg
     _cursorPos \
         db  BRDWIDTH / 2 - 1
         db  BRDHEIGHT / 2 - 1
+		
+	_selectedTile \
+		db 	0
+        db  0
 
     _board \
         db   2,  2,  2,  4, 32, 64, 64, 64  ; row 0
@@ -515,6 +562,6 @@ dataseg
 ; -------------------------------------------------------------------
 ; STACK
 ; -------------------------------------------------------------------
-stack 100h
+stack 2000h
 
 end main
