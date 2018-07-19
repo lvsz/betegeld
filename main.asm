@@ -281,65 +281,38 @@ endp printInt
 proc mouseHandler
     uses    eax, ebx, ecx, edx
 
-	movzx   eax, dx        			; copy absolute Y position
-	cmp     eax, BRDY0				
-	jl      @@notInField   			; skip if above field
-	cmp     eax, BRDY0 + BRDHEIGHT * TILESIZE
-	jge     @@notInField    		; skip if below field
-				
-	sar     cx, 1           		; need to halve absolute X position
-	cmp     cx, BRDX0				
-	jl      @@notInField    		; skip if left of field
-	cmp     cx, BRDX0 + BRDWIDTH * TILESIZE
-	jge     @@notInField    		; skip if right of field
+    and     bl, 3           ; for mouse click (?), not used yet
 
-	push 	bx						; save button state until after cursor move
-									; can't save it before checks, 
-									; otherwise stack messes up when mouse goes out of bounds
-	sub     eax, BRDY0
-	xor     edx, edx
-	mov     ebx, TILESIZE
-	div     ebx
-	mov     [byte ptr _cursorPos + 1], al   ; saves relative Y position
-	mov     ax, cx
-	sub     ax, BRDX0
-	xor     edx, edx
-	div     ebx
-	mov     [byte ptr _cursorPos], al       ; saves relative X position
+    movzx   eax, dx         ; copy absolute Y position
+    cmp     eax, BRDY0
+    jl      @@notInField    ; skip if above field
+    cmp     eax, BRDY0 + BRDHEIGHT * TILESIZE
+    jge     @@notInField    ; skip if below field
 
-	pop 	bx
-	cmp		bl, 1					; left-click?
-	jl 		@@noClick				; 0
-	jz 		@@switchOrSelectTile	; 1, so left-click
-	mov     [byte ptr _moveMode], 0 ; else, deselect
-	jmp		@@noClick
-		
-	@@switchOrSelectTile:
-		cmp 	[byte ptr _moveMode], 1 
-		jnz		@@select
-		call	switchTiles, [word ptr _selectedTile]
-		mov     [byte ptr _moveMode], 0
-		jmp 	@@noClick
-		
-	@@select:
-		call 	selectTile
-		mov     [byte ptr _moveMode], 1
-	
-	@@noClick:
-		call    updateGame  			; not sure why I have to call these here
-		call    drawGame    			; but currently doesn't function without
+    sar     cx, 1           ; need to halve absolute X position
+    cmp     cx, BRDX0
+    jl      @@notInField    ; skip if left of field
+    cmp     cx, BRDX0 + BRDWIDTH * TILESIZE
+    jge     @@notInField    ; skip if right of field
+
+    sub     eax, BRDY0
+    xor     edx, edx
+    mov     ebx, TILESIZE
+    div     ebx
+    mov     [byte ptr _cursorPos + 1], al   ; saves relative Y position
+    mov     ax, cx
+    sub     ax, BRDX0
+    xor     edx, edx
+    div     ebx
+    mov     [byte ptr _cursorPos], al       ; saves relative X position
+
+    call    updateGame  ; not sure why I have to call these here
+    call    drawGame    ; but currently doesn't function without
 
     @@notInField:
         ret
 ENDP mouseHandler
 
-proc selectTile 
-; select the current cursor position
-	uses 	eax
-	mov     ax, [word ptr offset _cursorPos]
-	mov 	[word ptr _selectedTile], ax
-	ret
-endp selectTile
 
 proc processUserInput
     uses    ebx, edx
@@ -357,17 +330,17 @@ proc processUserInput
     @@continue_game_1:
         cmp     ah, 039h    			; SPACE scan code
         jnz     @@continue_game_2
-		cmp		[byte ptr _moveMode], 1 ; if _moveMode == 1 (switching) then space switches
-		jnz 	@@selecting_tile		; if _moveMode == 0 (selecting) then space selects
+		cmp		[byte ptr _moveMode], 1 ; if _moveMode = 1 (switching) then space switches
+		jne 	@@selecting_tile		; if _moveMode = 0 (selecting) then space selects
 		call	switchTiles, [word ptr _selectedTile]
 		mov     [byte ptr _moveMode], 0 ; set _moveMode to selecting mode
 		jmp		@@continue_game_2
 		
 		@@selecting_tile:				; select the current cursor position
-			call 	selectTile
-			mov     [byte ptr _moveMode], 1 ; set _moveMode to switching mode
+		mov     ax, [word ptr offset _cursorPos]
+		mov 	[word ptr _selectedTile], ax
+        mov     [byte ptr _moveMode], 1 ; set _moveMode to switching mode
 
-		
     @@continue_game_2:
         ; check for cursor movements
         movzx   edx, ah
@@ -387,7 +360,7 @@ proc matchRows
     mov     esi, offset _board
     mov     edi, offset _board + 1
     mov     edx, BRDWIDTH   ; edx is #tiles remaining in row before matching
-    mov     ecx, edx        ; ecx is #tiles remaining in row after  matching
+    mov     ecx, edx        ; ecx is #tiles remaining in row after matching
 
     @@loop:
         repe    cmpsb       ; repeat while tile is equal to previous tile
@@ -494,7 +467,7 @@ proc main
         jz      @@main_loop
 		
 	
-	; call	waitForSpecificKeystroke, 001Bh ; keycode for ESC
+	call	waitForSpecificKeystroke, 001Bh ; keycode for ESC
 	call	mouse_uninstall
     call    terminateProcess
 endp main
