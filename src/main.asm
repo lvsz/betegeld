@@ -5,6 +5,7 @@ assume cs:_TEXT, ds:FLAT, es:FLAT, fs:FLAT, gs:FLAT
 
 include "keyb.inc"
 include "mouse.inc"
+include "rand.inc"
 
 ; compile-time constants
 VMEMADR   equ offset _screenBuffer  ; change to 0A0000h to skip buffer
@@ -468,27 +469,72 @@ proc matchColumns
 endp matchColumns
 
 
-; Removes found matches from the main board
+; Removes found matches from the main board refils empty spots
 proc removeMatches
-    uses ecx, esi, edi
+    uses ebx, ecx, esi, edi
 
-    call    matchRows
-    call    matchColumns
+    ; cascade for matching newly dropped tiles
+    @@cascade:
+        call    matchRows
+        call    matchColumns
 
-    mov     esi, offset _matches
-    mov     edi, offset _board
-    mov     ecx, BRDWIDTH * BRDHEIGHT
+        xor     ebx, ebx
+        mov     esi, offset _matches
+        mov     edi, offset _board
+        mov     ecx, BRDWIDTH * BRDHEIGHT
+
+        @@loop:
+            cmpsb
+            jne     @@skip
+            inc     ebx
+            mov     [byte ptr edi - 1], 0
+            @@skip:
+                mov     [byte ptr esi - 1], 0   ; reset tile on _matches
+                dec     ecx
+                jnz     @@loop
+
+        cmp     ebx, 0  ; done if no matches found
+        je      @@done
+        call    collapseTiles
+        jmp     @@cascade
+
+    @@done:
+        ret
+endp removeMatches
+
+
+; collapse tiles so there's no more empty space between them
+proc collapseTiles
+    uses eax, ebx, ecx
+
+    mov     ecx, offset _board + BRDHEIGHT * BRDWIDTH
 
     @@loop:
-        cmpsb
-        jne     @@skip
-        mov     [byte ptr edi - 1], 0
-        @@skip:
-            mov     [byte ptr esi - 1], 0
-            dec     ecx
-            jnz     @@loop
-    ret
-endp removeMatches
+        dec     ecx
+        cmp     ecx, offset _board
+        jl      @@done
+        cmp     [byte ptr ecx], 0
+        jne     @@loop
+        lea     ebx, [ecx - BRDWIDTH]
+        @@find_tile_above:
+            cmp     [byte ptr ebx], 0
+            jne     @@collapse
+            lea     ebx, [ebx - BRDWIDTH]
+            jmp     @@find_tile_above
+        @@collapse:
+            mov     ah, [byte ptr ebx]
+            mov     [byte ptr ecx], ah
+            mov     [byte ptr ebx], 0
+            jmp     @@loop
+
+    @@done:
+        call    refillDrops
+        ret
+endp collapseTiles
+
+
+proc refillDrops
+endp refillDrops
 
 
 ; Terminate the program.
@@ -568,6 +614,16 @@ dataseg
     _selectedTile \
         db  0
         db  0
+
+    _drops \
+        db   7,  7,  7,  4,  6,  7,  7,  4
+        db   6,  6,  7,  5,  7,  1,  5,  3
+        db   3,  5,  5,  3,  7,  3,  5,  1
+        db   3,  1,  1,  4,  4,  6,  4,  7
+        db   6,  6,  4,  2,  2,  7,  5,  6
+        db   3,  1,  7,  7,  1,  6,  3,  2
+        db   2,  6,  2,  1,  1,  7,  7,  2
+        db   4,  5,  7,  7,  2,  3,  2,  3
 
     _board \
         db   1,  1,  2,  2,  1,  1,  2,  2  ; row 0
