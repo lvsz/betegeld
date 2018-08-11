@@ -507,7 +507,7 @@ endp removeMatches
 proc collapseTiles
     uses eax, ebx, ecx
 
-    mov     ecx, offset _board + BRDHEIGHT * BRDWIDTH
+    mov     ecx, offset _board + BRDWIDTH * BRDHEIGHT
 
     @@loop:
         dec     ecx
@@ -534,6 +534,25 @@ endp collapseTiles
 
 
 proc refillDrops
+    uses eax, ecx, edx
+
+    mov     ecx, offset _drops + BRDWIDTH * BRDHEIGHT
+
+    @@loop:
+        dec     ecx
+        cmp     ecx, offset _drops
+        jl      @@done
+        cmp     [byte ptr ecx], 0
+        jne     @@loop
+        call    rand
+        xor     edx, edx
+        div     [dword 7]           ; use div to get remainder
+        inc     al                  ; tile colours are between 1 & 7
+        mov     [byte ptr ecx], al
+        jmp     @@loop
+
+    @@done:
+        ret
 endp refillDrops
 
 
@@ -567,6 +586,8 @@ proc main
 
     push    ds
     pop     es
+
+    call rand_init
 
     call mouse_present
     cmp eax, 1
@@ -623,7 +644,7 @@ dataseg
         db   6,  6,  4,  2,  2,  7,  5,  6
         db   3,  1,  7,  7,  1,  6,  3,  2
         db   2,  6,  2,  1,  1,  7,  7,  2
-        db   4,  5,  7,  7,  2,  3,  2,  3
+        db   1,  2,  3,  7,  2,  3,  2,  3
 
     _board \
         db   1,  1,  2,  2,  1,  1,  2,  2  ; row 0
@@ -634,14 +655,6 @@ dataseg
         db   6,  6,  5,  5,  6,  6,  5,  5  ; row 5
         db   7,  7,  6,  6,  7,  7,  6,  6  ; row 6
         db   1,  2,  3,  4,  5,  6,  7,  1  ; row 7
-        ;db   8,  2,  2,  4, 32, 64, 64, 64  ; row 0
-        ;db  64, 64, 32, 16, 16, 16,  8, 32  ; row 1
-        ;db   4,  4,  2,  2, 32,  2,  2,  2  ; row 2
-        ;db   2,  2,  8,  4,  4,  4,  8,  2  ; row 3
-        ;db  64, 64, 64, 16, 16, 32, 16, 16  ; row 4
-        ;db   8,  4, 64, 64, 64,  4,  4,  4  ; row 5
-        ;db   4,  4,  4,  4, 32, 16,  8,  2  ; row 6
-        ;db  64, 64, 16,  8,  8,  8,  2,  8  ; row 7
 
     _matches \
         db  (BRDWIDTH * BRDHEIGHT) dup (0)
