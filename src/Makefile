@@ -3,7 +3,7 @@
 # =============================================================================
 
 # Settings - Edit the names of the object and executable files.
-objs = mouse.obj keyb.obj main.obj
+objs = rand.obj mouse.obj keyb.obj main.obj
 dest = main.exe
 
 # =============================================================================
