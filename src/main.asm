@@ -250,15 +250,16 @@ endp switchTiles
 
 proc printInt
     arg     @@int:dword
-    uses    eax, edx
+    uses    eax, ebx, edx
 
     xor     edx, edx
+    mov     ebx, 10
     mov     eax, [@@int]
     push    eax
 
     @@loop:
 
-        div     [dword 10]
+        div     ebx
         push    edx
         cmp     eax, 0
         jne     @@loop
@@ -370,11 +371,14 @@ proc processUserInput
 
     @@continue_game_2:
         ; check for cursor movements
-        movzx   edx, ah
-        mov     ax, [word ptr offset _cursorPos]
-        add     ax, [word ptr _moves + edx + edx]
-        and     ax, 0707h
-        mov     [word ptr offset _cursorPos], ax
+        ;movzx   edx, ah                            ; move keyboard input
+        movzx   eax, ah
+        mov     bx, [word ptr _moves + eax + eax]   ; stored as words so edx added twice
+        mov     dx, [word ptr offset _cursorPos]    ; get current position
+        add     dl, bl                              ; use add an efficient modulo
+        add     dh, bh                              ; use add an efficient modulo
+        and     dx, 0707h
+        mov     [word ptr offset _cursorPos], dx
 
     xor al, al
     ret
@@ -561,8 +565,9 @@ endp collapseTiles
 
 
 proc refillDrops
-    uses eax, ecx, edx
+    uses eax, ebx, ecx, edx
 
+    mov     ebx, 7
     mov     ecx, offset _drops + BRDWIDTH * BRDHEIGHT
 
     @@loop:
@@ -573,9 +578,9 @@ proc refillDrops
         jne     @@loop
         call    rand
         xor     edx, edx
-        div     [dword 7]           ; use div to get remainder
-        inc     al                  ; tile colours are between 1 & 7
-        mov     [byte ptr ecx], al
+        div     ebx                 ; use div to get modulo 7
+        inc     dl                  ; tile colours are between 1 & 7
+        mov     [byte ptr ecx], dl
         jmp     @@loop
 
     @@done:
@@ -704,7 +709,7 @@ dataseg
         dw  72 dup (?)
         dw  0ff00h      ; move up
         dw  2 dup (?)
-        dw  0ffffh      ; move left
+        dw  000ffh      ; move left
         dw  (?)
         dw  00001h      ; move right
         dw  2 dup (?)
