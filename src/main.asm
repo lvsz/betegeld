@@ -321,40 +321,70 @@ proc processUserInput
     xor     edx, edx    ; emptying for later
     xor     ebx, ebx    ; emptying for later
 
-    xor     eax, eax    ; == mov ah, 0
+    xor     eax, eax    ; empty to get keyboard input
     int     16h         ; keyboard interrupt
 
     cmp     ah, 01h     ; ESC scan code
-    jnz     @@continue_game_1
+    jnz     @@continue_game
     ret
 
-    @@continue_game_1:
+    @@continue_game:
         cmp     ah, 039h                ; SPACE scan code
-        jnz     @@continue_game_2
+        jnz     @@move_cursor
         cmp     [byte ptr _moveMode], 1 ; if _moveMode = 1 (switching) then space switches
         jne     @@selecting_tile        ; if _moveMode = 0 (selecting) then space selects
         call    switchTiles, [word ptr _selectedTile]
         mov     [byte ptr _moveMode], 0 ; set _moveMode to selecting mode
-        jmp     @@continue_game_2
+        jmp     @@move_cursor
 
-        @@selecting_tile:               ; select the current cursor position
+    @@selecting_tile:                   ; select the current cursor position
         mov     ax, [word ptr offset _cursorPos]
         mov     [word ptr _selectedTile], ax
         mov     [byte ptr _moveMode], 1 ; set _moveMode to switching mode
 
-    @@continue_game_2:
+    @@move_cursor:
         ; check for cursor movements
-        ;movzx   edx, ah                            ; move keyboard input
-        movzx   eax, ah
+        movzx   eax, ah                             ; only interested in ah part of eax
         mov     bx, [word ptr _moves + eax + eax]   ; stored as words so edx added twice
+        cmp     [byte ptr _moveMode], 1             ; go to limited options in move mode
+        je      @@limited_move
         mov     dx, [word ptr offset _cursorPos]    ; get current position
-        add     dl, bl                              ; use add an efficient modulo
-        add     dh, bh                              ; use add an efficient modulo
+        add     dl, bl                              ; use ass an efficient modulo
+        add     dh, bh                              ; use ass an efficient modulo
         and     dx, 0707h
         mov     [word ptr offset _cursorPos], dx
+        jmp     @@done
 
-    xor al, al
-    ret
+    @@limited_move:
+        mov     dx, [word ptr offset _selectedTile]
+        add     dl, bl
+        add     dh, bh
+
+        cmp     dl, -1          ; check if move would be left of board
+        jne     $+6             ; if not, jump 6 bytes (next check)
+        inc     dl
+        jmp     @@finish_move
+
+        cmp     dl, 8           ; check if move would be right of board
+        jne     $+6             ; if not, jump 6 bytes (next check)
+        dec     dl
+        jmp     @@finish_move
+
+        cmp     dh, -1          ; check if move would be above board
+        jne     $+6             ; if not, jump 6 bytes (next check)
+        inc     dh
+        jmp     @@finish_move
+
+        cmp     dh, 8           ; check if move would be below board
+        jne     @@finish_move   ; if not, jump to finish_move
+        dec     dh
+
+        @@finish_move:
+            mov     [word ptr offset _cursorPos], dx
+
+    @@done:
+        xor al, al
+        ret
 endp processUserInput
 
 
@@ -573,14 +603,14 @@ proc terminateProcess
 endp terminateProcess
 
 proc waitForSpecificKeystroke
-    ARG     @@key:byte
-    USES    eax
+    arg     @@key:byte
+    uses    eax
 
     @@waitForKeystroke:
-        mov ah,00h
+        mov ah, 00h
         int 16h
-        cmp al,[@@key]
-    jne @@waitForKeystroke
+        cmp al, [@@key]
+        jne @@waitForKeystroke
 
     ret
 endp waitForSpecificKeystroke
