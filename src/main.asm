@@ -377,7 +377,7 @@ proc processUserInput
         call    swapTiles, [word ptr _selectedTile]
         mov     [byte ptr _moveMode], 0 ; set _moveMode to selecting mode
         jmp     @@move_cursor
-
+        
     @@selecting_tile:               ; select the current cursor position
 		call 	selectTile
 		mov     [byte ptr _moveMode], 1 ; set _moveMode to switching mode
@@ -579,7 +579,6 @@ proc checkForMatches
     @@done:
         ret
 endp checkForMatches
-
 
 ; collapse tiles so there's no more empty space between them
 proc collapseTiles
