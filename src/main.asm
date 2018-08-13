@@ -295,19 +295,21 @@ endp printInt
 proc mouseHandler
     uses    eax, ebx, ecx, edx
 
-    and     bl, 3           ; for mouse click (?), not used yet
-
     movzx   eax, dx         ; copy absolute Y position
     cmp     eax, BRDY0
     jl      @@notInField    ; skip if above field
     cmp     eax, BRDY0 + BRDHEIGHT * TILESIZE
-    jge     @@notInField    ; skip if below field
+    jge     short @@notInField    ; skip if below field
 
     sar     cx, 1           ; need to halve absolute X position
     cmp     cx, BRDX0
-    jl      @@notInField    ; skip if left of field
+    jl      short @@notInField    ; skip if left of field
     cmp     cx, BRDX0 + BRDWIDTH * TILESIZE
-    jge     @@notInField    ; skip if right of field
+    jge     short @@notInField    ; skip if right of field
+
+	push 	bx				; save button state until after cursor move
+							; can't save it before ^^ checks, 
+							; otherwise stack messes up when mouse goes out of bounds
 
     sub     eax, BRDY0
     xor     edx, edx
@@ -320,13 +322,39 @@ proc mouseHandler
     div     ebx
     mov     [byte ptr _cursorPos], al       ; saves relative X position
 
-    call    updateGame  ; not sure why I have to call these here
-    call    drawGame    ; but currently doesn't function without
+	pop 	bx
+	cmp		bl, 1					; left-click?
+	jl 		@@noClick				; 0
+	je 		@@switchOrSelectTile	; 1, so left-click
+	mov     [byte ptr _moveMode], 0 ; else, right/scrollclick => deselect
+	jmp		@@noClick
+		
+	@@switchOrSelectTile:
+		cmp 	[byte ptr _moveMode], 1 
+		jnz		@@select
+		call	switchTiles, [word ptr _selectedTile]
+		mov     [byte ptr _moveMode], 0
+		jmp 	@@noClick
+		
+	@@select:
+		call 	selectTile
+		mov     [byte ptr _moveMode], 1
+	
+	@@noClick:
+		call    updateGame
+		call    drawGame
 
     @@notInField:
         ret
 endp mouseHandler
 
+proc selectTile 
+; selects the current cursor position
+	uses 	eax
+	mov     ax, [word ptr offset _cursorPos]
+	mov 	[word ptr _selectedTile], ax
+	ret
+endp selectTile
 
 proc processUserInput
     uses    ebx, edx
@@ -349,11 +377,10 @@ proc processUserInput
         call    swapTiles, [word ptr _selectedTile]
         mov     [byte ptr _moveMode], 0 ; set _moveMode to selecting mode
         jmp     @@move_cursor
-
-    @@selecting_tile:                   ; select the current cursor position
-        mov     ax, [word ptr offset _cursorPos]
-        mov     [word ptr _selectedTile], ax
-        mov     [byte ptr _moveMode], 1 ; set _moveMode to switching mode
+        
+    @@selecting_tile:               ; select the current cursor position
+		call 	selectTile
+		mov     [byte ptr _moveMode], 1 ; set _moveMode to switching mode
 
     @@move_cursor:
         ; check for cursor movements
@@ -553,7 +580,6 @@ proc checkForMatches
         ret
 endp checkForMatches
 
-
 ; collapse tiles so there's no more empty space between them
 proc collapseTiles
     uses eax, ebx, ecx
@@ -663,8 +689,7 @@ proc main
         jz      @@main_loop
 
 
-    call    waitForSpecificKeystroke, 001Bh ; keycode for ESC
-    call    mouse_uninstall
+	call    mouse_uninstall
     call    terminateProcess
 endp main
 
