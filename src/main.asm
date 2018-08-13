@@ -365,16 +365,9 @@ proc processUserInput
         mov     [byte ptr _moveMode], 0 ; set _moveMode to selecting mode
         jmp     @@move_cursor
 
-<<<<<<< HEAD
-        @@selecting_tile:               ; select the current cursor position
-			call 	selectTile
-			mov     [byte ptr _moveMode], 1 ; set _moveMode to switching mode
-=======
-    @@selecting_tile:                   ; select the current cursor position
-        mov     ax, [word ptr offset _cursorPos]
-        mov     [word ptr _selectedTile], ax
-        mov     [byte ptr _moveMode], 1 ; set _moveMode to switching mode
->>>>>>> d6b1e43... Moves limited to 1 tile (only on keyboard for now)
+    @@selecting_tile:               ; select the current cursor position
+		call 	selectTile
+		mov     [byte ptr _moveMode], 1 ; set _moveMode to switching mode
 
     @@move_cursor:
         ; check for cursor movements
