@@ -217,6 +217,7 @@ proc drawGame
     ret
 endp drawGame
 
+
 ;Call with a point (x:y),
 ;returns absolute address of its position on the board in eax.
 proc getBoardPosition
@@ -231,8 +232,9 @@ proc getBoardPosition
     ret
 endp getBoardPosition
 
+
 ;Call with the point (x:y) of the selected tile
-proc switchTiles
+proc swapTiles
     arg     @@selectedTile: word
     uses    eax, ebx, edx
 
@@ -244,9 +246,20 @@ proc switchTiles
     mov     [eax], dl                               ; swap
     mov     [ebx], dh
 
-
+    push    eax
+    call    checkForMatches ; return 0 in eax if no match made
+    cmp     eax, 0
+    je      @@undo_swap     ; in case of no match, move is invalid
+    pop     eax
     ret
-endp switchTiles
+
+    @@undo_swap:
+        pop     eax
+        mov     [eax], dh   ; restore old value
+        mov     [ebx], dl   ; restore old value
+        ret
+endp swapTiles
+
 
 proc printInt
     arg     @@int:dword
@@ -361,7 +374,7 @@ proc processUserInput
         jnz     @@move_cursor
         cmp     [byte ptr _moveMode], 1 ; if _moveMode = 1 (switching) then space switches
         jne     @@selecting_tile        ; if _moveMode = 0 (selecting) then space selects
-        call    switchTiles, [word ptr _selectedTile]
+        call    swapTiles, [word ptr _selectedTile]
         mov     [byte ptr _moveMode], 0 ; set _moveMode to selecting mode
         jmp     @@move_cursor
 
@@ -376,8 +389,8 @@ proc processUserInput
         cmp     [byte ptr _moveMode], 1             ; go to limited options in move mode
         je      @@limited_move
         mov     dx, [word ptr offset _cursorPos]    ; get current position
-        add     dl, bl                              ; use ass an efficient modulo
-        add     dh, bh                              ; use ass an efficient modulo
+        add     dl, bl                              ; use as an efficient modulo
+        add     dh, bh                              ; use as an efficient modulo
         and     dx, 0707h
         mov     [word ptr offset _cursorPos], dx
         jmp     @@done
@@ -531,8 +544,11 @@ endp matchColumns
 
 
 ; Removes found matches from the main board refils empty spots
-proc removeMatches
+proc checkForMatches
     uses ebx, ecx, esi, edi
+
+
+    xor eax, eax
 
     ; cascade for matching newly dropped tiles
     @@cascade:
@@ -547,6 +563,7 @@ proc removeMatches
         @@loop:
             cmpsb
             jne     @@skip
+            inc     eax
             inc     ebx
             mov     [byte ptr edi - 1], 0
             @@skip:
@@ -554,14 +571,14 @@ proc removeMatches
                 dec     ecx
                 jnz     @@loop
 
-        cmp     ebx, 0  ; done if no matches found
-        je      @@done
-        call    collapseTiles
-        jmp     @@cascade
+        cmp     ebx, 0
+        je      @@done          ; done if no matches found
+        call    collapseTiles   ; else collapse & refill tiles
+        jmp     @@cascade       ; and repeat
 
     @@done:
         ret
-endp removeMatches
+endp checkForMatches
 
 
 ; collapse tiles so there's no more empty space between them
@@ -666,7 +683,6 @@ proc main
     call    mouse_install, offset mouseHandler
 
     @@main_loop:
-        call    removeMatches
         call    updateGame
         call    drawGame
         call    processUserInput    ; returns al > 0 for exit
