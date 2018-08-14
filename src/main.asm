@@ -246,7 +246,11 @@ proc swapTiles
     mov     dh, [eax]                               ; and the other value
     mov     [eax], dl                               ; swap
     mov     [ebx], dh
+<<<<<<< HEAD
     call    animateMoves
+=======
+    ;call    animateMoves
+>>>>>>> 4fb76cd2fe5fd37d2f255191bdc9419c3d53ff41
 
     push    eax
     call    checkForMatches ; return 0 in eax if no match made
@@ -259,7 +263,11 @@ proc swapTiles
         pop     eax
         mov     [eax], dh   ; restore old value
         mov     [ebx], dl   ; restore old value
+<<<<<<< HEAD
         call    animateMoves
+=======
+        ;call    animateMoves
+>>>>>>> 4fb76cd2fe5fd37d2f255191bdc9419c3d53ff41
         ret
 endp swapTiles
 
@@ -273,9 +281,15 @@ proc animateMoves
     call    updateGame
     call    drawGame
 
+<<<<<<< HEAD
     ; delay for half a second
     mov     cx, 07h
     mov     dx, 0A120h
+=======
+    ; delay for a second
+    mov     cx, 0Fh
+    mov     dx, 4240h
+>>>>>>> 4fb76cd2fe5fd37d2f255191bdc9419c3d53ff41
     mov     ah, 86h
     int     15h
 
@@ -332,7 +346,14 @@ proc mouseHandler
     push    bx              ; save button state until after cursor move
                             ; can't save it before ^^ checks,
                             ; otherwise stack messes up when mouse goes out of bounds
+<<<<<<< HEAD
 							
+=======
+
+    push    bx                      ; save button state until after cursor move
+                                    ; can't save it before checks,
+                                    ; otherwise stack messes up when mouse goes out of bounds
+>>>>>>> 4fb76cd2fe5fd37d2f255191bdc9419c3d53ff41
     sub     eax, BRDY0
     xor     edx, edx
     mov     ebx, TILESIZE
@@ -607,7 +628,11 @@ endp checkForMatches
 proc collapseTiles
     uses    eax, ebx, ecx
 
+<<<<<<< HEAD
     call    animateMoves
+=======
+    ;call    animateMoves
+>>>>>>> 4fb76cd2fe5fd37d2f255191bdc9419c3d53ff41
 
     mov     ecx, offset _board + BRDWIDTH * BRDHEIGHT
 
@@ -630,9 +655,15 @@ proc collapseTiles
             jmp     @@loop
 
     @@done:
+<<<<<<< HEAD
         call   animateMoves
         call    refillDrops
         call   animateMoves
+=======
+        ;call   animateMoves
+        call    refillDrops
+        ;call   animateMoves
+>>>>>>> 4fb76cd2fe5fd37d2f255191bdc9419c3d53ff41
         ret
 endp collapseTiles
 
