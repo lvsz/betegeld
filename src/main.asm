@@ -283,36 +283,6 @@ proc animateMoves
 
 endp animateMoves
 
-proc printInt
-    arg     @@int:dword
-    uses    eax, ebx, edx
-
-    xor     edx, edx
-    mov     ebx, 10
-    mov     eax, [@@int]
-    push    eax
-
-    @@loop:
-
-        div     ebx
-        push    edx
-        cmp     eax, 0
-        jne     @@loop
-
-    @@loop2:
-        pop     edx
-
-        mov     ah, 2h
-        add     edx, 48
-        int     21h
-
-        sub     edx, 48
-        cmp     edx, [@@int]
-        jne     @@loop2
-
-    ret
-endp printInt
-
 
 proc mouseHandler
     uses    eax, ebx, ecx, edx
@@ -452,31 +422,47 @@ proc processUserInput
 endp processUserInput
 
 
+; adds score for a match based on length and consecutiveness
+; score = (length - 1) * 50 * K, with K the Kth match in a single turn
+proc addScore
+    arg @@length:dword  ; length of match
+    uses eax
+
+    mov     eax, [dword ptr @@length]
+    dec     eax
+    mul     [dword ptr _scoreCoefficient]
+    add     [dword ptr _score], eax
+    add     [dword ptr _scoreCoefficient], 50
+
+    ret
+endp addScore
+
 proc matchRows
-    uses    ecx, edx, edi, esi
+    uses    ebx, ecx, edi, esi
 
     mov     esi, offset _board
     mov     edi, offset _board + 1
-    mov     edx, BRDWIDTH   ; edx is #tiles remaining in row before matching
-    mov     ecx, edx        ; ecx is #tiles remaining in row after matching
+    mov     ebx, BRDWIDTH   ; ebx is #tiles remaining in row before matching
+    mov     ecx, BRDWIDTH   ; ecx is #tiles remaining in row after matching
 
     @@loop:
         repe    cmpsb       ; repeat while tile is equal to previous tile
                             ; changes values of ecx, esi & edi
-        sub     edx, ecx    ; result is length of match found
-        cmp     edx, 3      ; match needs to be length 3 or more
+        sub     ebx, ecx    ; result is length of match found
+        cmp     ebx, 3      ; match needs to be length 3 or more
         jge     @@match
 
         cmp     ecx, 3      ; ecx is number of remaining tiles in row
         jl      @@next_row  ; if ecx < 3, no match possible, so go to next row
-        mov     edx, ecx    ; else update edx to ecx to continue search
+        mov     ebx, ecx    ; else update ebx to ecx to continue search
         jmp     @@loop
 
         @@match:
+            call    addScore, ebx
             push    esi         ; save esi
             push    edi         ; save edi
             dec     esi         ; move esi to last matching tile
-            xchg    ecx, edx    ; save ecx in edx & put #tiles remaining in ecx
+            xchg    ecx, ebx    ; save ecx in ebx & put #tiles remaining in ecx
 
             ; set edi to equivalent position in _matches array
             lea     edi, [offset _matches + esi - offset _board]
@@ -486,7 +472,7 @@ proc matchRows
             cld             ; clear direction flag
 
             ; restore values to continue loop
-            mov     ecx, edx
+            mov     ecx, ebx
             pop     edi
             pop     esi
             jmp     @@loop
@@ -496,8 +482,8 @@ proc matchRows
             add     edi, ecx        ; position to move to next row
             cmp     esi, offset _board + (BRDWIDTH * BRDHEIGHT)
             jge     @@done          ; done if current position is out of bounds
-            mov     edx, BRDWIDTH   ; else reset ecx & edx and continue loop
-            mov     ecx, edx
+            mov     ebx, BRDWIDTH   ; else reset ecx & ebx and continue loop
+            mov     ecx, ebx
             jmp     @@loop
 
         @@done:
@@ -507,7 +493,7 @@ endp matchRows
 
 proc matchOneColumn
     arg     @@col: dword
-    uses    ebx, ecx, edi, esi
+    uses    ecx, ebx, edi, esi
 
     xor     ebx, ebx
     mov     esi, offset _board
@@ -537,6 +523,7 @@ proc matchOneColumn
         push    esi
         push    edi
         inc     ebx
+        call    addScore, ebx
         @@copy:
             lea     esi, [esi - BRDWIDTH]
             lea     edi, [offset _matches + esi - offset _board]
@@ -566,25 +553,6 @@ proc matchColumns
     ret
 endp matchColumns
 
-proc scoreRows
-
-    mov     esi, offset _board
-    mov     edi, offset _board + 1
-    mov     ecx, BRDWIDTH
-    mov     edx, BRDWIDTH
-
-    @@loop:
-        repe    cmpsb
-        sub     edx, ecx
-        cmp     edx, 3
-        ;jge     @@match
-
-
-endp scoreRows
-
-proc scoreMatches
-    
-endp scoreMatches
 
 ; Removes found matches from the main board refils empty spots
 ; Stores total number of matches made in eax register
@@ -620,6 +588,7 @@ proc checkForMatches
         jmp     @@cascade       ; and repeat
 
     @@done:
+        mov     [dword ptr _scoreCoefficient], 50   ; reset coefficient
         ret
 endp checkForMatches
 
@@ -709,6 +678,27 @@ proc terminateProcess
     uses eax
 
     call    setVideoMode, 03h
+
+    xor     ecx, ecx
+    mov     eax, [dword ptr _score]
+    mov     ebx, 10
+    @@loop1:
+        xor edx, edx
+        div ebx
+        inc ecx
+        push edx
+        cmp eax, 0
+        jne @@loop1
+
+        ; Print int.
+        mov ah, 02h  ; interupt om char te printen
+    @@loop2:
+        pop edx
+        add edx, 30h ; telt ascii code voor nul bij op
+        int 21h
+        dec ecx      ; dec zet automatisch de zero flag als ecx == 0
+        jne @@loop2
+
     mov     ax, 04C00h
     int     21h
 
@@ -755,6 +745,7 @@ proc main
 
     call    fillBoard
     call    checkForMatches
+    mov     [dword ptr _score], 0   ; reset any score from filling board
 
     @@main_loop:
         call    updateGame
@@ -807,6 +798,9 @@ dataseg
     _score \
         dd  0
 
+    _scoreCoefficient \
+        dd  50
+
     _palette \
         db  000h, 000h, 000h    ; 0 black
         db  0FFh, 000h, 000h    ; 1 red
@@ -830,7 +824,7 @@ dataseg
         dw  00100h      ; move down
 
     _moveMode \
-        db 0
+        db  0
 
 ; -------------------------------------------------------------------
 ; STACK
