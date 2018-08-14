@@ -330,12 +330,8 @@ proc mouseHandler
     jge     short @@notInField    ; skip if right of field
 
     push    bx              ; save button state until after cursor move
-                            ; can't save it before ^^ checks,
+                            ; can't save it before checks,
                             ; otherwise stack messes up when mouse goes out of bounds
-
-    push    bx                      ; save button state until after cursor move
-                                    ; can't save it before checks,
-                                    ; otherwise stack messes up when mouse goes out of bounds
     sub     eax, BRDY0
     xor     edx, edx
     mov     ebx, TILESIZE
@@ -372,16 +368,17 @@ proc mouseHandler
 
     @@notInField:
         ret
-ENDP mouseHandler
+endp mouseHandler
 
 
-proc selectTile
 ; select the current cursor position
+proc selectTile
     uses    eax
     mov     ax, [word ptr offset _cursorPos]
     mov     [word ptr _selectedTile], ax
     ret
 endp selectTile
+
 
 proc processUserInput
     uses    ebx, edx
@@ -509,12 +506,12 @@ endp matchRows
 
 
 proc matchOneColumn
-    arg     @@n: dword
+    arg     @@col: dword
     uses    ebx, ecx, edi, esi
 
     xor     ebx, ebx
     mov     esi, offset _board
-    add     esi, [@@n]              ; set esi to correct column
+    add     esi, [@@col]            ; set esi to correct column
     lea     edi, [esi + BRDWIDTH]   ; set edi to tile below esi
     mov     ecx, BRDHEIGHT          ; use ecx as counter
 
@@ -569,8 +566,28 @@ proc matchColumns
     ret
 endp matchColumns
 
+proc scoreRows
+
+    mov     esi, offset _board
+    mov     edi, offset _board + 1
+    mov     ecx, BRDWIDTH
+    mov     edx, BRDWIDTH
+
+    @@loop:
+        repe    cmpsb
+        sub     edx, ecx
+        cmp     edx, 3
+        ;jge     @@match
+
+
+endp scoreRows
+
+proc scoreMatches
+    
+endp scoreMatches
 
 ; Removes found matches from the main board refils empty spots
+; Stores total number of matches made in eax register
 proc checkForMatches
     uses ebx, ecx, esi, edi
 
@@ -587,11 +604,11 @@ proc checkForMatches
         mov     ecx, BRDWIDTH * BRDHEIGHT
 
         @@loop:
-            cmpsb
-            jne     @@skip
-            inc     eax
-            inc     ebx
-            mov     [byte ptr edi - 1], 0
+            cmpsb           ; compare tile from _board & _matches
+            jne     @@skip  ; skip when not equal
+            inc     eax     ; increase total matches made counter
+            inc     ebx     ; increase current matches made counter
+            mov     [byte ptr edi - 1], 0       ; empty _board tile
             @@skip:
                 mov     [byte ptr esi - 1], 0   ; reset tile on _matches
                 dec     ecx
@@ -605,6 +622,7 @@ proc checkForMatches
     @@done:
         ret
 endp checkForMatches
+
 
 ; collapse tiles so there's no more empty space between them
 proc collapseTiles
@@ -688,7 +706,7 @@ endp fillBoard
 
 ; Terminate the program.
 proc terminateProcess
-    uses    eax
+    uses eax
 
     call    setVideoMode, 03h
     mov     ax, 04C00h
@@ -744,7 +762,6 @@ proc main
         call    processUserInput    ; returns al > 0 for exit
         cmp     al, 0
         jz      @@main_loop
-
 
     call    mouse_uninstall
     call    terminateProcess
