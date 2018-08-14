@@ -190,7 +190,7 @@ proc updateGame
     call    drawCursor, eax
 
     @@nothing_selected:
-    ret
+        ret
 endp updateGame
 
 
@@ -205,9 +205,9 @@ proc drawGame
         jnz     @@waitVBlank_wait1
 
     @@waitVBlank_wait2:
-        in  al, dx                  ; read status
-        and al, 01000b              ; test bit 3
-        jz  @@waitVBlank_wait2
+        in      al, dx              ; read status
+        and     al, 01000b          ; test bit 3
+        jz      @@waitVBlank_wait2
 
     mov     esi, VMEMADR
     mov     edi, 0A0000h            ; video memory address
@@ -316,9 +316,9 @@ endp printInt
 proc mouseHandler
     uses    eax, ebx, ecx, edx
 
-    movzx   eax, dx         ; copy absolute Y position
+    movzx   eax, dx                 ; copy absolute Y position
     cmp     eax, BRDY0
-    jl      @@notInField    ; skip if above field
+    jl      @@notInField            ; skip if above field
     cmp     eax, BRDY0 + BRDHEIGHT * TILESIZE
     jge     short @@notInField    ; skip if below field
 
@@ -332,6 +332,9 @@ proc mouseHandler
 							; can't save it before ^^ checks, 
 							; otherwise stack messes up when mouse goes out of bounds
 
+    push    bx                      ; save button state until after cursor move
+                                    ; can't save it before checks,
+                                    ; otherwise stack messes up when mouse goes out of bounds
     sub     eax, BRDY0
     xor     edx, edx
     mov     ebx, TILESIZE
@@ -365,16 +368,18 @@ proc mouseHandler
 		call    updateGame
 		call    drawGame
 
+
     @@notInField:
         ret
-endp mouseHandler
+ENDP mouseHandler
 
-proc selectTile 
-; selects the current cursor position
-	uses 	eax
-	mov     ax, [word ptr offset _cursorPos]
-	mov 	[word ptr _selectedTile], ax
-	ret
+
+proc selectTile
+; select the current cursor position
+    uses    eax
+    mov     ax, [word ptr offset _cursorPos]
+    mov     [word ptr _selectedTile], ax
+    ret
 endp selectTile
 
 proc processUserInput
@@ -383,12 +388,11 @@ proc processUserInput
     xor     edx, edx    ; emptying for later
     xor     ebx, ebx    ; emptying for later
 
-    xor     eax, eax    ; empty to get keyboard input
+    xor     eax, eax    ; == mov ah, 0
     int     16h         ; keyboard interrupt
 
     cmp     ah, 01h     ; ESC scan code
-    jnz     @@continue_game
-    ret
+    je      @@done
 
     @@continue_game:
         cmp     ah, 039h                ; SPACE scan code
@@ -414,6 +418,7 @@ proc processUserInput
         add     dh, bh                              ; use as an efficient modulo
         and     dx, 0707h
         mov     [word ptr offset _cursorPos], dx
+        xor     al, al                              ; clean up eax before returning
         jmp     @@done
 
     @@limited_move:
@@ -442,9 +447,9 @@ proc processUserInput
 
         @@finish_move:
             mov     [word ptr offset _cursorPos], dx
+            xor     al, al      ; clean up eax before returning
 
     @@done:
-        xor al, al				; al is 0 if esc wasn't pressed
         ret
 endp processUserInput
 
@@ -568,7 +573,6 @@ endp matchColumns
 proc checkForMatches
     uses ebx, ecx, esi, edi
 
-
     xor eax, eax
 
     ; cascade for matching newly dropped tiles
@@ -669,6 +673,7 @@ proc terminateProcess
 
     ret
 endp terminateProcess
+
 
 proc waitForSpecificKeystroke
     arg     @@key:byte
