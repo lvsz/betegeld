@@ -18,6 +18,7 @@ BRDX0     equ ((SCRWIDTH - BRDWIDTH * TILESIZE) / 2)
 BRDY0     equ (SCRHEIGHT - BRDHEIGHT * TILESIZE)
 
 NCOLORS   equ 9         ; number of colors used
+TCOLORS   equ 7         ; number of colors used for tile
 ; colors in palette used
 BLACK     equ 0
 RED       equ 1
@@ -25,7 +26,7 @@ GREEN     equ 2
 BLUE      equ 3
 YELLOW    equ 4
 ORANGE    equ 5
-PURPLE    equ 6
+CYAN      equ 6
 PINK      equ 7
 WHITE     equ 8
 
@@ -642,7 +643,7 @@ endp collapseTiles
 proc refillDrops
     uses eax, ebx, ecx, edx
 
-    mov     ebx, 7
+    mov     ebx, TCOLORS
     mov     ecx, offset _drops + BRDWIDTH * BRDHEIGHT
 
     @@loop:
@@ -654,8 +655,8 @@ proc refillDrops
         call    rand
         xor     edx, edx
         div     ebx                 ; use div to get remainder of eax / 7
-        inc     dl                  ; tile colours are between 1 & 7
-        mov     [byte ptr ecx], dl
+        inc     dl                  ; tile colors are between 1 & 7
+        mov     [byte ptr ecx], dl  ; move value to empty tile
         jmp     @@loop
 
     @@done:
@@ -663,25 +664,27 @@ proc refillDrops
 endp refillDrops
 
 
+; fills both visible _board & invisible _drops
 proc fillBoard
     uses eax, ebx, ecx, edx, edi
 
     mov     edi, offset _drops
     mov     ecx, 2 * BRDWIDTH * BRDHEIGHT
-    mov     ebx, 7
+    mov     ebx, TCOLORS
 
     @@loop:
-        call    rand
         xor     edx, edx
-        div     ebx
-        inc     dl
-        xchg    al, dl
-        stosb
+        call    rand
+        div     ebx     ; divide to get remainder
+        inc     dl      ; tile colors are between 1 & 7
+        mov     al, dl  ; move remainder to al
+        stosb           ; store value of al into edi
         dec     ecx
         jnz     @@loop
 
     ret
 endp fillBoard
+
 
 ; Terminate the program.
 proc terminateProcess
@@ -700,13 +703,14 @@ proc waitForSpecificKeystroke
     uses    eax
 
     @@waitForKeystroke:
-        mov ah, 00h
-        int 16h
-        cmp al, [@@key]
-        jne @@waitForKeystroke
+        mov     ah, 00h
+        int     16h
+        cmp     al, [@@key]
+        jne     @@waitForKeystroke
 
     ret
 endp waitForSpecificKeystroke
+
 
 proc main
     sti
@@ -746,6 +750,7 @@ proc main
     call    terminateProcess
 endp main
 
+
 ; -------------------------------------------------------------------
 dataseg
     _screenBuffer \
@@ -767,14 +772,6 @@ dataseg
 
     _drops \
         db  (BRDWIDTH * BRDHEIGHT) dup (?)
-        ;db   7,  7,  7,  4,  6,  7,  7,  4
-        ;db   6,  6,  7,  5,  7,  1,  5,  3
-        ;db   3,  5,  5,  3,  7,  3,  5,  1
-        ;db   3,  1,  1,  4,  4,  6,  4,  7
-        ;db   6,  6,  4,  2,  2,  7,  5,  6
-        ;db   3,  1,  7,  7,  1,  6,  3,  2
-        ;db   2,  6,  2,  1,  1,  7,  7,  2
-        ;db   1,  2,  3,  7,  2,  3,  2,  3
 
     _board \
         db  (BRDWIDTH * BRDHEIGHT) dup (?)
@@ -800,8 +797,8 @@ dataseg
         db  000h, 000h, 0FFh    ; 3 blue
         db  0FFh, 0FFh, 000h    ; 4 yellow
         db  0FFh, 0A5h, 000h    ; 5 orange
-        db  000h, 0FFh, 0FFh    ; 6 purple
-        db  0FFh, 0D5h, 0BBh    ; 7 pink
+        db  000h, 0FFh, 0FFh    ; 6 cyan
+        db  0FFh, 0D9h, 0BFh    ; 7 pink
         db  0FFh, 0FFh, 0FFh    ; 8 white
 
     ; indices based on keyboard scan codes
