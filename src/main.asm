@@ -245,6 +245,7 @@ proc swapTiles
     mov     dh, [eax]                               ; and the other value
     mov     [eax], dl                               ; swap
     mov     [ebx], dh
+	call	animateMoves
 
     push    eax
     call    checkForMatches ; return 0 in eax if no match made
@@ -257,9 +258,29 @@ proc swapTiles
         pop     eax
         mov     [eax], dh   ; restore old value
         mov     [ebx], dl   ; restore old value
+		call	animateMoves
         ret
 endp swapTiles
 
+proc animateMoves
+	uses	eax, ecx, edx
+	
+	xor		eax, eax
+	xor		ecx, ecx
+	xor		edx, edx
+	
+	call 	updateGame
+	call	drawGame
+	
+	; delay for a second
+	mov		cx, 0Fh
+	mov		dx, 4240h
+	mov		ah, 86h
+	int		15h
+	
+	ret
+
+endp animateMoves
 
 proc printInt
     arg     @@int:dword
@@ -332,7 +353,7 @@ proc mouseHandler
 	@@switchOrSelectTile:
 		cmp 	[byte ptr _moveMode], 1 
 		jnz		@@select
-		call	switchTiles, [word ptr _selectedTile]
+		call	swapTiles, [word ptr _selectedTile]
 		mov     [byte ptr _moveMode], 0
 		jmp 	@@noClick
 		
@@ -372,7 +393,7 @@ proc processUserInput
     @@continue_game:
         cmp     ah, 039h                ; SPACE scan code
         jnz     @@move_cursor
-        cmp     [byte ptr _moveMode], 1 ; if _moveMode = 1 (switching) then space switches
+        cmp     [byte ptr _moveMode], 1 ; if _moveMode = 1 (switching) then space swaps
         jne     @@selecting_tile        ; if _moveMode = 0 (selecting) then space selects
         call    swapTiles, [word ptr _selectedTile]
         mov     [byte ptr _moveMode], 0 ; set _moveMode to selecting mode
@@ -380,12 +401,12 @@ proc processUserInput
         
     @@selecting_tile:               ; select the current cursor position
 		call 	selectTile
-		mov     [byte ptr _moveMode], 1 ; set _moveMode to switching mode
+		mov     [byte ptr _moveMode], 1 ; set _moveMode to swapping mode
 
     @@move_cursor:
         ; check for cursor movements
         movzx   eax, ah                             ; only interested in ah part of eax
-        mov     bx, [word ptr _moves + eax + eax]   ; stored as words so edx added twice
+        mov     bx, [word ptr _moves + eax + eax]   ; stored as words so eax added twice
         cmp     [byte ptr _moveMode], 1             ; go to limited options in move mode
         je      @@limited_move
         mov     dx, [word ptr offset _cursorPos]    ; get current position
@@ -423,7 +444,7 @@ proc processUserInput
             mov     [word ptr offset _cursorPos], dx
 
     @@done:
-        xor al, al
+        xor al, al				; al is 0 if esc wasn't pressed
         ret
 endp processUserInput
 
@@ -582,8 +603,10 @@ endp checkForMatches
 
 ; collapse tiles so there's no more empty space between them
 proc collapseTiles
-    uses eax, ebx, ecx
+    uses	eax, ebx, ecx
 
+	call	animateMoves
+	
     mov     ecx, offset _board + BRDWIDTH * BRDHEIGHT
 
     @@loop:
@@ -605,7 +628,9 @@ proc collapseTiles
             jmp     @@loop
 
     @@done:
+		call	animateMoves
         call    refillDrops
+		call	animateMoves
         ret
 endp collapseTiles
 
