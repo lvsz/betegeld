@@ -195,7 +195,7 @@ endp updateGame
 
 
 proc drawGame
-    uses    ecx, edx, edi, esi
+    uses    eax, ecx, edx, edi, esi
 
     mov     dx, 03DAh               ; VGA status port
 
@@ -258,25 +258,29 @@ proc swapTiles
         pop     eax
         mov     [eax], dh   ; restore old value
         mov     [ebx], dl   ; restore old value
+		
+		xor		eax, eax	; no delay after undo animation
 		call	animateMoves
+		
         ret
 endp swapTiles
 
 proc animateMoves
 	uses	eax, ecx, edx
 	
-	xor		eax, eax
-	xor		ecx, ecx
-	xor		edx, edx
-	
 	call 	updateGame
 	call	drawGame
 	
-	; delay for a second
-	mov		cx, 0Fh
-	mov		dx, 4240h
+	cmp		eax, 0
+	jne		@@delay
+	ret
+	
+	@@delay:
+	; delay for half a second
+	mov		cx, 07h	
+	mov		dx, 0A120h		
 	mov		ah, 86h
-	int		15h
+	int		15h		; delay for cx:dx microseconds
 	
 	ret
 
@@ -320,11 +324,11 @@ proc mouseHandler
     cmp     eax, BRDY0
     jl      @@notInField    ; skip if above field
     cmp     eax, BRDY0 + BRDHEIGHT * TILESIZE
-    jge     short @@notInField    ; skip if below field
+    jge     @@notInField    ; skip if below field
 
     sar     cx, 1           ; need to halve absolute X position
     cmp     cx, BRDX0
-    jl      short @@notInField    ; skip if left of field
+    jl      short @@notInField    ; skip if left of field, short because they are in 128bits of the label, unlike the ones above
     cmp     cx, BRDX0 + BRDWIDTH * TILESIZE
     jge     short @@notInField    ; skip if right of field
 
@@ -564,7 +568,7 @@ proc matchColumns
 endp matchColumns
 
 
-; Removes found matches from the main board refils empty spots
+; Removes found matches from the main board refills empty spots
 proc checkForMatches
     uses ebx, ecx, esi, edi
 
@@ -605,7 +609,7 @@ endp checkForMatches
 proc collapseTiles
     uses	eax, ebx, ecx
 
-	call	animateMoves
+	call	animateMoves		; show empty space after matches and before collapsing
 	
     mov     ecx, offset _board + BRDWIDTH * BRDHEIGHT
 
@@ -628,15 +632,16 @@ proc collapseTiles
             jmp     @@loop
 
     @@done:
-		call	animateMoves
+		call	animateMoves	; show filled up collapsed space
         call    refillDrops
-		call	animateMoves
+		xor		eax, eax
+		call	animateMoves	; show new tiles
         ret
 endp collapseTiles
 
 
 proc refillDrops
-    uses eax, ebx, ecx, edx
+    uses	eax, ebx, ecx, edx
 
     mov     ebx, 7
     mov     ecx, offset _drops + BRDWIDTH * BRDHEIGHT
