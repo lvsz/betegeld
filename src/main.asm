@@ -18,6 +18,7 @@ BRDX0     equ ((SCRWIDTH - BRDWIDTH * TILESIZE) / 2)
 BRDY0     equ (SCRHEIGHT - BRDHEIGHT * TILESIZE)
 
 NCOLORS   equ 9         ; number of colors used
+TCOLORS   equ 7         ; number of colors used for tile
 ; colors in palette used
 BLACK     equ 0
 RED       equ 1
@@ -25,7 +26,7 @@ GREEN     equ 2
 BLUE      equ 3
 YELLOW    equ 4
 ORANGE    equ 5
-PURPLE    equ 6
+CYAN      equ 6
 PINK      equ 7
 WHITE     equ 8
 
@@ -195,7 +196,7 @@ endp updateGame
 
 
 proc drawGame
-    uses    eax, ecx, edx, edi, esi
+    uses    ecx, edx, edi, esi
 
     mov     dx, 03DAh               ; VGA status port
 
@@ -245,7 +246,7 @@ proc swapTiles
     mov     dh, [eax]                               ; and the other value
     mov     [eax], dl                               ; swap
     mov     [ebx], dh
-	call	animateMoves
+    call    animateMoves
 
     push    eax
     call    checkForMatches ; return 0 in eax if no match made
@@ -258,31 +259,27 @@ proc swapTiles
         pop     eax
         mov     [eax], dh   ; restore old value
         mov     [ebx], dl   ; restore old value
-		
-		xor		eax, eax	; no delay after undo animation
-		call	animateMoves
-		
+        call    animateMoves
         ret
 endp swapTiles
 
 proc animateMoves
-	uses	eax, ecx, edx
-	
-	call 	updateGame
-	call	drawGame
-	
-	cmp		eax, 0
-	jne		@@delay
-	ret
-	
-	@@delay:
-	; delay for half a second
-	mov		cx, 07h	
-	mov		dx, 0A120h		
-	mov		ah, 86h
-	int		15h		; delay for cx:dx microseconds
-	
-	ret
+    uses    eax, ecx, edx
+
+    xor     eax, eax
+    xor     ecx, ecx
+    xor     edx, edx
+
+    call    updateGame
+    call    drawGame
+
+    ; delay for half a second
+    mov     cx, 07h
+    mov     dx, 0A120h
+    mov     ah, 86h
+    int     15h
+
+    ret
 
 endp animateMoves
 
@@ -324,21 +321,18 @@ proc mouseHandler
     cmp     eax, BRDY0
     jl      @@notInField            ; skip if above field
     cmp     eax, BRDY0 + BRDHEIGHT * TILESIZE
-    jge     @@notInField    ; skip if below field
+    jge     short @@notInField    ; skip if below field
 
     sar     cx, 1           ; need to halve absolute X position
     cmp     cx, BRDX0
-    jl      short @@notInField    ; skip if left of field, short because they are in 128bits of the label, unlike the ones above
+    jl      short @@notInField    ; skip if left of field
     cmp     cx, BRDX0 + BRDWIDTH * TILESIZE
     jge     short @@notInField    ; skip if right of field
 
-	push 	bx				; save button state until after cursor move
-							; can't save it before ^^ checks, 
-							; otherwise stack messes up when mouse goes out of bounds
-
-    push    bx                      ; save button state until after cursor move
-                                    ; can't save it before checks,
-                                    ; otherwise stack messes up when mouse goes out of bounds
+    push    bx              ; save button state until after cursor move
+                            ; can't save it before ^^ checks,
+                            ; otherwise stack messes up when mouse goes out of bounds
+							
     sub     eax, BRDY0
     xor     edx, edx
     mov     ebx, TILESIZE
@@ -350,27 +344,27 @@ proc mouseHandler
     div     ebx
     mov     [byte ptr _cursorPos], al       ; saves relative X position
 
-	pop 	bx
-	cmp		bl, 1					; left-click?
-	jl 		@@noClick				; 0
-	je 		@@switchOrSelectTile	; 1, so left-click
-	mov     [byte ptr _moveMode], 0 ; else, right/scrollclick => deselect
-	jmp		@@noClick
-		
-	@@switchOrSelectTile:
-		cmp 	[byte ptr _moveMode], 1 
-		jnz		@@select
-		call	swapTiles, [word ptr _selectedTile]
-		mov     [byte ptr _moveMode], 0
-		jmp 	@@noClick
-		
-	@@select:
-		call 	selectTile
-		mov     [byte ptr _moveMode], 1
-	
-	@@noClick:
-		call    updateGame
-		call    drawGame
+    pop     bx
+    cmp     bl, 1                   ; left-click?
+    jl      @@noClick               ; 0
+    je      @@switchOrSelectTile    ; 1, so left-click
+    mov     [byte ptr _moveMode], 0 ; else, right/scrollclick => deselect
+    jmp     @@noClick
+
+    @@switchOrSelectTile:
+        cmp     [byte ptr _moveMode], 1
+        jnz     @@select
+        call    swapTiles, [word ptr _selectedTile]
+        mov     [byte ptr _moveMode], 0
+        jmp     @@noClick
+
+    @@select:
+        call    selectTile
+        mov     [byte ptr _moveMode], 1
+
+    @@noClick:
+        call    updateGame
+        call    drawGame
 
 
     @@notInField:
@@ -406,10 +400,10 @@ proc processUserInput
         call    swapTiles, [word ptr _selectedTile]
         mov     [byte ptr _moveMode], 0 ; set _moveMode to selecting mode
         jmp     @@move_cursor
-        
+
     @@selecting_tile:               ; select the current cursor position
-		call 	selectTile
-		mov     [byte ptr _moveMode], 1 ; set _moveMode to swapping mode
+        call    selectTile
+        mov     [byte ptr _moveMode], 1 ; set _moveMode to swapping mode
 
     @@move_cursor:
         ; check for cursor movements
@@ -573,7 +567,7 @@ proc matchColumns
 endp matchColumns
 
 
-; Removes found matches from the main board refills empty spots
+; Removes found matches from the main board refils empty spots
 proc checkForMatches
     uses ebx, ecx, esi, edi
 
@@ -611,10 +605,10 @@ endp checkForMatches
 
 ; collapse tiles so there's no more empty space between them
 proc collapseTiles
-    uses	eax, ebx, ecx
+    uses    eax, ebx, ecx
 
-	call	animateMoves		; show empty space after matches and before collapsing
-	
+    call    animateMoves
+
     mov     ecx, offset _board + BRDWIDTH * BRDHEIGHT
 
     @@loop:
@@ -636,18 +630,17 @@ proc collapseTiles
             jmp     @@loop
 
     @@done:
-		call	animateMoves	; show filled up collapsed space
+        call   animateMoves
         call    refillDrops
-		xor		eax, eax
-		call	animateMoves	; show new tiles
+        call   animateMoves
         ret
 endp collapseTiles
 
 
 proc refillDrops
-    uses	eax, ebx, ecx, edx
+    uses eax, ebx, ecx, edx
 
-    mov     ebx, 7
+    mov     ebx, TCOLORS
     mov     ecx, offset _drops + BRDWIDTH * BRDHEIGHT
 
     @@loop:
@@ -658,14 +651,36 @@ proc refillDrops
         jne     @@loop
         call    rand
         xor     edx, edx
-        div     ebx                 ; use div to get modulo 7
-        inc     dl                  ; tile colours are between 1 & 7
-        mov     [byte ptr ecx], dl
+        div     ebx                 ; use div to get remainder of eax / 7
+        inc     dl                  ; tile colors are between 1 & 7
+        mov     [byte ptr ecx], dl  ; move value to empty tile
         jmp     @@loop
 
     @@done:
         ret
 endp refillDrops
+
+
+; fills both visible _board & invisible _drops
+proc fillBoard
+    uses eax, ebx, ecx, edx, edi
+
+    mov     edi, offset _drops
+    mov     ecx, 2 * BRDWIDTH * BRDHEIGHT
+    mov     ebx, TCOLORS
+
+    @@loop:
+        xor     edx, edx
+        call    rand
+        div     ebx     ; divide to get remainder
+        inc     dl      ; tile colors are between 1 & 7
+        mov     al, dl  ; move remainder to al
+        stosb           ; store value of al into edi
+        dec     ecx
+        jnz     @@loop
+
+    ret
+endp fillBoard
 
 
 ; Terminate the program.
@@ -685,13 +700,14 @@ proc waitForSpecificKeystroke
     uses    eax
 
     @@waitForKeystroke:
-        mov ah, 00h
-        int 16h
-        cmp al, [@@key]
-        jne @@waitForKeystroke
+        mov     ah, 00h
+        int     16h
+        cmp     al, [@@key]
+        jne     @@waitForKeystroke
 
     ret
 endp waitForSpecificKeystroke
+
 
 proc main
     sti
@@ -716,6 +732,9 @@ proc main
     call    updateColourPalette
     call    mouse_install, offset mouseHandler
 
+    call    fillBoard
+    call    checkForMatches
+
     @@main_loop:
         call    updateGame
         call    drawGame
@@ -724,9 +743,10 @@ proc main
         jz      @@main_loop
 
 
-	call    mouse_uninstall
+    call    mouse_uninstall
     call    terminateProcess
 endp main
+
 
 ; -------------------------------------------------------------------
 dataseg
@@ -748,24 +768,18 @@ dataseg
         db  0
 
     _drops \
-        db   7,  7,  7,  4,  6,  7,  7,  4
-        db   6,  6,  7,  5,  7,  1,  5,  3
-        db   3,  5,  5,  3,  7,  3,  5,  1
-        db   3,  1,  1,  4,  4,  6,  4,  7
-        db   6,  6,  4,  2,  2,  7,  5,  6
-        db   3,  1,  7,  7,  1,  6,  3,  2
-        db   2,  6,  2,  1,  1,  7,  7,  2
-        db   1,  2,  3,  7,  2,  3,  2,  3
+        db  (BRDWIDTH * BRDHEIGHT) dup (?)
 
     _board \
-        db   1,  1,  2,  2,  1,  1,  2,  2  ; row 0
-        db   1,  1,  2,  2,  1,  1,  2,  2  ; row 1
-        db   4,  3,  1,  1,  3,  3,  1,  1  ; row 2
-        db   4,  4,  1,  1,  4,  4,  1,  1  ; row 3
-        db   1,  6,  5,  5,  6,  6,  5,  5  ; row 4
-        db   6,  6,  5,  5,  6,  6,  5,  5  ; row 5
-        db   7,  7,  6,  6,  7,  7,  6,  6  ; row 6
-        db   1,  2,  3,  4,  5,  6,  7,  1  ; row 7
+        db  (BRDWIDTH * BRDHEIGHT) dup (?)
+        ;db   1,  1,  2,  2,  1,  1,  2,  2  ; row 0
+        ;db   1,  1,  2,  2,  1,  1,  2,  2  ; row 1
+        ;db   4,  3,  1,  1,  3,  3,  1,  1  ; row 2
+        ;db   4,  4,  1,  1,  4,  4,  1,  1  ; row 3
+        ;db   1,  6,  5,  5,  6,  6,  5,  5  ; row 4
+        ;db   6,  6,  5,  5,  6,  6,  5,  5  ; row 5
+        ;db   7,  7,  6,  6,  7,  7,  6,  6  ; row 6
+        ;db   1,  2,  3,  4,  5,  6,  7,  1  ; row 7
 
     _matches \
         db  (BRDWIDTH * BRDHEIGHT) dup (0)
@@ -780,8 +794,8 @@ dataseg
         db  000h, 000h, 0FFh    ; 3 blue
         db  0FFh, 0FFh, 000h    ; 4 yellow
         db  0FFh, 0A5h, 000h    ; 5 orange
-        db  000h, 0FFh, 0FFh    ; 6 purple
-        db  0FFh, 0DFh, 0EEh    ; 7 pink
+        db  000h, 0FFh, 0FFh    ; 6 cyan
+        db  0FFh, 0D9h, 0BFh    ; 7 pink
         db  0FFh, 0FFh, 0FFh    ; 8 white
 
     ; indices based on keyboard scan codes
