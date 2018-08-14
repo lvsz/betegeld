@@ -245,7 +245,7 @@ proc swapTiles
     mov     dh, [eax]                               ; and the other value
     mov     [eax], dl                               ; swap
     mov     [ebx], dh
-	call	animateMoves
+    ;call    animateMoves
 
     push    eax
     call    checkForMatches ; return 0 in eax if no match made
@@ -258,27 +258,27 @@ proc swapTiles
         pop     eax
         mov     [eax], dh   ; restore old value
         mov     [ebx], dl   ; restore old value
-		call	animateMoves
+        ;call    animateMoves
         ret
 endp swapTiles
 
 proc animateMoves
-	uses	eax, ecx, edx
-	
-	xor		eax, eax
-	xor		ecx, ecx
-	xor		edx, edx
-	
-	call 	updateGame
-	call	drawGame
-	
-	; delay for a second
-	mov		cx, 0Fh
-	mov		dx, 4240h
-	mov		ah, 86h
-	int		15h
-	
-	ret
+    uses    eax, ecx, edx
+
+    xor     eax, eax
+    xor     ecx, ecx
+    xor     edx, edx
+
+    call    updateGame
+    call    drawGame
+
+    ; delay for a second
+    mov     cx, 0Fh
+    mov     dx, 4240h
+    mov     ah, 86h
+    int     15h
+
+    ret
 
 endp animateMoves
 
@@ -328,9 +328,9 @@ proc mouseHandler
     cmp     cx, BRDX0 + BRDWIDTH * TILESIZE
     jge     short @@notInField    ; skip if right of field
 
-	push 	bx				; save button state until after cursor move
-							; can't save it before ^^ checks, 
-							; otherwise stack messes up when mouse goes out of bounds
+    push    bx              ; save button state until after cursor move
+                            ; can't save it before ^^ checks,
+                            ; otherwise stack messes up when mouse goes out of bounds
 
     push    bx                      ; save button state until after cursor move
                                     ; can't save it before checks,
@@ -346,27 +346,27 @@ proc mouseHandler
     div     ebx
     mov     [byte ptr _cursorPos], al       ; saves relative X position
 
-	pop 	bx
-	cmp		bl, 1					; left-click?
-	jl 		@@noClick				; 0
-	je 		@@switchOrSelectTile	; 1, so left-click
-	mov     [byte ptr _moveMode], 0 ; else, right/scrollclick => deselect
-	jmp		@@noClick
-		
-	@@switchOrSelectTile:
-		cmp 	[byte ptr _moveMode], 1 
-		jnz		@@select
-		call	swapTiles, [word ptr _selectedTile]
-		mov     [byte ptr _moveMode], 0
-		jmp 	@@noClick
-		
-	@@select:
-		call 	selectTile
-		mov     [byte ptr _moveMode], 1
-	
-	@@noClick:
-		call    updateGame
-		call    drawGame
+    pop     bx
+    cmp     bl, 1                   ; left-click?
+    jl      @@noClick               ; 0
+    je      @@switchOrSelectTile    ; 1, so left-click
+    mov     [byte ptr _moveMode], 0 ; else, right/scrollclick => deselect
+    jmp     @@noClick
+
+    @@switchOrSelectTile:
+        cmp     [byte ptr _moveMode], 1
+        jnz     @@select
+        call    swapTiles, [word ptr _selectedTile]
+        mov     [byte ptr _moveMode], 0
+        jmp     @@noClick
+
+    @@select:
+        call    selectTile
+        mov     [byte ptr _moveMode], 1
+
+    @@noClick:
+        call    updateGame
+        call    drawGame
 
 
     @@notInField:
@@ -402,10 +402,10 @@ proc processUserInput
         call    swapTiles, [word ptr _selectedTile]
         mov     [byte ptr _moveMode], 0 ; set _moveMode to selecting mode
         jmp     @@move_cursor
-        
+
     @@selecting_tile:               ; select the current cursor position
-		call 	selectTile
-		mov     [byte ptr _moveMode], 1 ; set _moveMode to swapping mode
+        call    selectTile
+        mov     [byte ptr _moveMode], 1 ; set _moveMode to swapping mode
 
     @@move_cursor:
         ; check for cursor movements
@@ -607,10 +607,10 @@ endp checkForMatches
 
 ; collapse tiles so there's no more empty space between them
 proc collapseTiles
-    uses	eax, ebx, ecx
+    uses    eax, ebx, ecx
 
-	call	animateMoves
-	
+    ;call    animateMoves
+
     mov     ecx, offset _board + BRDWIDTH * BRDHEIGHT
 
     @@loop:
@@ -632,9 +632,9 @@ proc collapseTiles
             jmp     @@loop
 
     @@done:
-		call	animateMoves
+        ;call   animateMoves
         call    refillDrops
-		call	animateMoves
+        ;call   animateMoves
         ret
 endp collapseTiles
 
@@ -719,7 +719,7 @@ proc main
         jz      @@main_loop
 
 
-	call    mouse_uninstall
+    call    mouse_uninstall
     call    terminateProcess
 endp main
 
