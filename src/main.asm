@@ -653,7 +653,7 @@ proc refillDrops
         jne     @@loop
         call    rand
         xor     edx, edx
-        div     ebx                 ; use div to get modulo 7
+        div     ebx                 ; use div to get remainder of eax / 7
         inc     dl                  ; tile colours are between 1 & 7
         mov     [byte ptr ecx], dl
         jmp     @@loop
@@ -662,6 +662,26 @@ proc refillDrops
         ret
 endp refillDrops
 
+
+proc fillBoard
+    uses eax, ebx, ecx, edx, edi
+
+    mov     edi, offset _drops
+    mov     ecx, 2 * BRDWIDTH * BRDHEIGHT
+    mov     ebx, 7
+
+    @@loop:
+        call    rand
+        xor     edx, edx
+        div     ebx
+        inc     dl
+        xchg    al, dl
+        stosb
+        dec     ecx
+        jnz     @@loop
+
+    ret
+endp fillBoard
 
 ; Terminate the program.
 proc terminateProcess
@@ -711,6 +731,9 @@ proc main
     call    updateColourPalette
     call    mouse_install, offset mouseHandler
 
+    call    fillBoard
+    call    checkForMatches
+
     @@main_loop:
         call    updateGame
         call    drawGame
@@ -743,24 +766,26 @@ dataseg
         db  0
 
     _drops \
-        db   7,  7,  7,  4,  6,  7,  7,  4
-        db   6,  6,  7,  5,  7,  1,  5,  3
-        db   3,  5,  5,  3,  7,  3,  5,  1
-        db   3,  1,  1,  4,  4,  6,  4,  7
-        db   6,  6,  4,  2,  2,  7,  5,  6
-        db   3,  1,  7,  7,  1,  6,  3,  2
-        db   2,  6,  2,  1,  1,  7,  7,  2
-        db   1,  2,  3,  7,  2,  3,  2,  3
+        db  (BRDWIDTH * BRDHEIGHT) dup (?)
+        ;db   7,  7,  7,  4,  6,  7,  7,  4
+        ;db   6,  6,  7,  5,  7,  1,  5,  3
+        ;db   3,  5,  5,  3,  7,  3,  5,  1
+        ;db   3,  1,  1,  4,  4,  6,  4,  7
+        ;db   6,  6,  4,  2,  2,  7,  5,  6
+        ;db   3,  1,  7,  7,  1,  6,  3,  2
+        ;db   2,  6,  2,  1,  1,  7,  7,  2
+        ;db   1,  2,  3,  7,  2,  3,  2,  3
 
     _board \
-        db   1,  1,  2,  2,  1,  1,  2,  2  ; row 0
-        db   1,  1,  2,  2,  1,  1,  2,  2  ; row 1
-        db   4,  3,  1,  1,  3,  3,  1,  1  ; row 2
-        db   4,  4,  1,  1,  4,  4,  1,  1  ; row 3
-        db   1,  6,  5,  5,  6,  6,  5,  5  ; row 4
-        db   6,  6,  5,  5,  6,  6,  5,  5  ; row 5
-        db   7,  7,  6,  6,  7,  7,  6,  6  ; row 6
-        db   1,  2,  3,  4,  5,  6,  7,  1  ; row 7
+        db  (BRDWIDTH * BRDHEIGHT) dup (?)
+        ;db   1,  1,  2,  2,  1,  1,  2,  2  ; row 0
+        ;db   1,  1,  2,  2,  1,  1,  2,  2  ; row 1
+        ;db   4,  3,  1,  1,  3,  3,  1,  1  ; row 2
+        ;db   4,  4,  1,  1,  4,  4,  1,  1  ; row 3
+        ;db   1,  6,  5,  5,  6,  6,  5,  5  ; row 4
+        ;db   6,  6,  5,  5,  6,  6,  5,  5  ; row 5
+        ;db   7,  7,  6,  6,  7,  7,  6,  6  ; row 6
+        ;db   1,  2,  3,  4,  5,  6,  7,  1  ; row 7
 
     _matches \
         db  (BRDWIDTH * BRDHEIGHT) dup (0)
@@ -776,7 +801,7 @@ dataseg
         db  0FFh, 0FFh, 000h    ; 4 yellow
         db  0FFh, 0A5h, 000h    ; 5 orange
         db  000h, 0FFh, 0FFh    ; 6 purple
-        db  0FFh, 0DFh, 0EEh    ; 7 pink
+        db  0FFh, 0D5h, 0BBh    ; 7 pink
         db  0FFh, 0FFh, 0FFh    ; 8 white
 
     ; indices based on keyboard scan codes
