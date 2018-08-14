@@ -332,7 +332,7 @@ proc mouseHandler
     push    bx              ; save button state until after cursor move
                             ; can't save it before ^^ checks,
                             ; otherwise stack messes up when mouse goes out of bounds
-							
+
     sub     eax, BRDY0
     xor     edx, edx
     mov     ebx, TILESIZE
@@ -630,9 +630,9 @@ proc collapseTiles
             jmp     @@loop
 
     @@done:
-        call   animateMoves
-        call    refillDrops
-        call   animateMoves
+        call	animateMoves
+        call	refillDrops
+        call	animateMoves
         ret
 endp collapseTiles
 
