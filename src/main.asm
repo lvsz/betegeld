@@ -344,7 +344,7 @@ endp mouseHandler
 ; select the current cursor position
 proc selectTile
     uses    eax
-    mov     ax, [word ptr offset _cursorPos]
+    mov     ax, [word ptr _cursorPos]
     mov     [word ptr _selectedTile], ax
     ret
 endp selectTile
@@ -364,12 +364,13 @@ proc processUserInput
 
     @@continue_game:
         cmp     ah, 039h                ; SPACE scan code
-        jnz     @@move_cursor
+        jne     @@move_cursor
         cmp     [byte ptr _moveMode], 1 ; if _moveMode = 1 (switching) then space swaps
         jne     @@selecting_tile        ; if _moveMode = 0 (selecting) then space selects
         call    swapTiles, [word ptr _selectedTile]
         mov     [byte ptr _moveMode], 0 ; set _moveMode to selecting mode
-        jmp     @@move_cursor
+        xor     al, al
+        jmp     short @@done
 
     @@selecting_tile:               ; select the current cursor position
         call    selectTile
@@ -399,7 +400,7 @@ proc processUserInput
         inc     dl
         jmp     @@finish_move
 
-        cmp     dl, 8           ; check if move would be right of board
+        cmp     dl, BRDWIDTH    ; check if move would be right of board
         jne     $+6             ; if not, jump 6 bytes (next check)
         dec     dl
         jmp     @@finish_move
@@ -409,7 +410,7 @@ proc processUserInput
         inc     dh
         jmp     @@finish_move
 
-        cmp     dh, 8           ; check if move would be below board
+        cmp     dh, BRDWIDTH    ; check if move would be below board
         jne     @@finish_move   ; if not, jump to finish_move
         dec     dh
 
@@ -673,32 +674,56 @@ proc fillBoard
 endp fillBoard
 
 
+; displays current score on screen
+proc displayScore
+    uses eax, ebx, ecx, edx, edi
+
+    mov     dx, 0101h   ; set cursor position to row 1 & column 1
+    xor     bx, bx
+    mov     ah, 2h      ; function to set cursor position
+    int     10h         ; video mode interrupt
+
+    mov     edx, offset _scoreText  ; gets the "SCORE: " string
+    mov     ah, 9h                  ; function to display string
+    int     21h                     ; displays string
+
+    mov     eax, [dword ptr _score]
+    mov     ebx, 10
+    xor     ecx, ecx
+
+    ; integers gets processed from lowest to highest significant figure
+    ; so put on stack to display eventual string correctly later
+    @@put_digits_on_stack:
+        xor     edx, edx
+        div     ebx         ; divide eax by ebx, with remainder stored in edx
+        add     edx, '0'    ; turn digit into char by adding char code of '0'
+        push    edx         ; put on stack for later
+        inc     ecx
+        cmp     eax, 0
+        jne     @@put_digits_on_stack
+
+    mov     edi, offset _scoreBuffer    ; set destination to buffer
+
+    @@pop_digits_from_stack:
+        pop     eax
+        stosb                           ; store value of eax in buffer
+        dec     ecx
+        jnz     @@pop_digits_from_stack
+
+    mov     [dword ptr edi], '$'        ; mark end of string
+    mov     edx, offset _scoreBuffer
+    mov     ah, 9h                      ; function to display string
+    int     21h
+
+    ret
+endp displayScore
+
+
 ; Terminate the program.
 proc terminateProcess
     uses eax
 
     call    setVideoMode, 03h
-
-    xor     ecx, ecx
-    mov     eax, [dword ptr _score]
-    mov     ebx, 10
-    @@loop1:
-        xor edx, edx
-        div ebx
-        inc ecx
-        push edx
-        cmp eax, 0
-        jne @@loop1
-
-        ; Print int.
-        mov ah, 02h  ; interupt om char te printen
-    @@loop2:
-        pop edx
-        add edx, 30h ; telt ascii code voor nul bij op
-        int 21h
-        dec ecx      ; dec zet automatisch de zero flag als ecx == 0
-        jne @@loop2
-
     mov     ax, 04C00h
     int     21h
 
@@ -750,6 +775,7 @@ proc main
     @@main_loop:
         call    updateGame
         call    drawGame
+        call    displayScore
         call    processUserInput    ; returns al > 0 for exit
         cmp     al, 0
         jz      @@main_loop
@@ -825,6 +851,14 @@ dataseg
 
     _moveMode \
         db  0
+
+    _scoreText \
+        db  "SCORE: ", '$'
+
+    _scoreBuffer \
+        db  20 dup (?)
+
+    _foo dw 1234
 
 ; -------------------------------------------------------------------
 ; STACK
