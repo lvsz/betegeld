@@ -433,14 +433,14 @@ proc mouseHandler
 		
 	@@notInField:
         ret
-	
-ENDP mouseHandler
+		
+endp mouseHandler
 
 
-proc selectTile
 ; select the current cursor position
+proc selectTile
     uses    eax
-    mov     ax, [word ptr offset _cursorPos]
+    mov     ax, [word ptr _cursorPos]
     mov     [word ptr _selectedTile], ax
     ret
 endp selectTile
@@ -503,7 +503,7 @@ proc processUserInput
         inc     dl
         jmp     @@finish_move
 
-        cmp     dl, 8           ; check if move would be right of board
+        cmp     dl, BRDWIDTH    ; check if move would be right of board
         jne     $+6             ; if not, jump 6 bytes (next check)
         dec     dl
         jmp     @@finish_move
@@ -513,7 +513,7 @@ proc processUserInput
         inc     dh
         jmp     @@finish_move
 
-        cmp     dh, 8           ; check if move would be below board
+        cmp     dh, BRDWIDTH    ; check if move would be below board
         jne     @@finish_move   ; if not, jump to finish_move
         dec     dh
 
@@ -526,31 +526,47 @@ proc processUserInput
 endp processUserInput
 
 
+; adds score for a match based on length and consecutiveness
+; score = (length - 1) * 50 * K, with K the Kth match in a single turn
+proc addScore
+    arg @@length:dword  ; length of match
+    uses eax
+
+    mov     eax, [dword ptr @@length]
+    dec     eax
+    mul     [dword ptr _scoreCoefficient]
+    add     [dword ptr _score], eax
+    add     [dword ptr _scoreCoefficient], 50
+
+    ret
+endp addScore
+
 proc matchRows
-    uses    ecx, edx, edi, esi
+    uses    ebx, ecx, edi, esi
 
     mov     esi, offset _board
     mov     edi, offset _board + 1
-    mov     edx, BRDWIDTH   ; edx is #tiles remaining in row before matching
-    mov     ecx, edx        ; ecx is #tiles remaining in row after matching
+    mov     ebx, BRDWIDTH   ; ebx is #tiles remaining in row before matching
+    mov     ecx, BRDWIDTH   ; ecx is #tiles remaining in row after matching
 
     @@loop:
         repe    cmpsb       ; repeat while tile is equal to previous tile
                             ; changes values of ecx, esi & edi
-        sub     edx, ecx    ; result is length of match found
-        cmp     edx, 3      ; match needs to be length 3 or more
+        sub     ebx, ecx    ; result is length of match found
+        cmp     ebx, 3      ; match needs to be length 3 or more
         jge     @@match
 
         cmp     ecx, 3      ; ecx is number of remaining tiles in row
         jl      @@next_row  ; if ecx < 3, no match possible, so go to next row
-        mov     edx, ecx    ; else update edx to ecx to continue search
+        mov     ebx, ecx    ; else update ebx to ecx to continue search
         jmp     @@loop
 
         @@match:
+            call    addScore, ebx
             push    esi         ; save esi
             push    edi         ; save edi
             dec     esi         ; move esi to last matching tile
-            xchg    ecx, edx    ; save ecx in edx & put #tiles remaining in ecx
+            xchg    ecx, ebx    ; save ecx in ebx & put #tiles remaining in ecx
 
             ; set edi to equivalent position in _matches array
             lea     edi, [offset _matches + esi - offset _board]
@@ -560,7 +576,7 @@ proc matchRows
             cld             ; clear direction flag
 
             ; restore values to continue loop
-            mov     ecx, edx
+            mov     ecx, ebx
             pop     edi
             pop     esi
             jmp     @@loop
@@ -570,8 +586,8 @@ proc matchRows
             add     edi, ecx        ; position to move to next row
             cmp     esi, offset _board + (BRDWIDTH * BRDHEIGHT)
             jge     @@done          ; done if current position is out of bounds
-            mov     edx, BRDWIDTH   ; else reset ecx & edx and continue loop
-            mov     ecx, edx
+            mov     ebx, BRDWIDTH   ; else reset ecx & ebx and continue loop
+            mov     ecx, ebx
             jmp     @@loop
 
         @@done:
@@ -580,12 +596,12 @@ endp matchRows
 
 
 proc matchOneColumn
-    arg     @@n: dword
-    uses    ebx, ecx, edi, esi
+    arg     @@col: dword
+    uses    ecx, ebx, edi, esi
 
     xor     ebx, ebx
     mov     esi, offset _board
-    add     esi, [@@n]              ; set esi to correct column
+    add     esi, [@@col]            ; set esi to correct column
     lea     edi, [esi + BRDWIDTH]   ; set edi to tile below esi
     mov     ecx, BRDHEIGHT          ; use ecx as counter
 
@@ -611,6 +627,7 @@ proc matchOneColumn
         push    esi
         push    edi
         inc     ebx
+        call    addScore, ebx
         @@copy:
             lea     esi, [esi - BRDWIDTH]
             lea     edi, [offset _matches + esi - offset _board]
@@ -641,7 +658,8 @@ proc matchColumns
 endp matchColumns
 
 
-; Removes found matches from the main board refills empty spots
+; Removes found matches from the main board, refills empty spots
+; Stores total number of matches made in eax register
 proc checkForMatches
     uses ebx, ecx, esi, edi
 
@@ -658,11 +676,11 @@ proc checkForMatches
         mov     ecx, BRDWIDTH * BRDHEIGHT
 
         @@loop:
-            cmpsb
-            jne     @@skip
-            inc     eax
-            inc     ebx
-            mov     [byte ptr edi - 1], 0
+            cmpsb           ; compare tile from _board & _matches
+            jne     @@skip  ; skip when not equal
+            inc     eax     ; increase total matches made counter
+            inc     ebx     ; increase current matches made counter
+            mov     [byte ptr edi - 1], 0       ; empty _board tile
             @@skip:
                 mov     [byte ptr esi - 1], 0   ; reset tile on _matches
                 dec     ecx
@@ -674,8 +692,10 @@ proc checkForMatches
         jmp     @@cascade       ; and repeat
 
     @@done:
+        mov     [dword ptr _scoreCoefficient], 50   ; reset coefficient
         ret
 endp checkForMatches
+
 
 ; collapse tiles so there's no more empty space between them
 proc collapseTiles
@@ -759,9 +779,54 @@ proc fillBoard
 endp fillBoard
 
 
+; displays current score on screen
+proc displayScore
+    uses eax, ebx, ecx, edx, edi
+
+    mov     dx, 0101h   ; set cursor position to row 1 & column 1
+    xor     bx, bx
+    mov     ah, 2h      ; function to set cursor position
+    int     10h         ; video mode interrupt
+
+    mov     edx, offset _scoreText  ; gets the "SCORE: " string
+    mov     ah, 9h                  ; function to display string
+    int     21h                     ; displays string
+
+    mov     eax, [dword ptr _score]
+    mov     ebx, 10
+    xor     ecx, ecx
+
+    ; integers gets processed from lowest to highest significant figure
+    ; so put on stack to display eventual string correctly later
+    @@put_digits_on_stack:
+        xor     edx, edx
+        div     ebx         ; divide eax by ebx, with remainder stored in edx
+        add     edx, '0'    ; turn digit into char by adding char code of '0'
+        push    edx         ; put on stack for later
+        inc     ecx
+        cmp     eax, 0
+        jne     @@put_digits_on_stack
+
+    mov     edi, offset _scoreBuffer    ; set destination to buffer
+
+    @@pop_digits_from_stack:
+        pop     eax
+        stosb                           ; store value of eax in buffer
+        dec     ecx
+        jnz     @@pop_digits_from_stack
+
+    mov     [dword ptr edi], '$'        ; mark end of string
+    mov     edx, offset _scoreBuffer
+    mov     ah, 9h                      ; function to display string
+    int     21h
+
+    ret
+endp displayScore
+
+
 ; Terminate the program.
 proc terminateProcess
-    uses    eax
+    uses eax
 
     call    setVideoMode, 03h
     mov     ax, 04C00h
@@ -810,14 +875,15 @@ proc main
 
     call    fillBoard
     call    checkForMatches
+    mov     [dword ptr _score], 0   ; reset any score from filling board
 
     @@main_loop:
         call    updateGame
         call    drawGame
+        call    displayScore
         call    processUserInput    ; returns al > 0 for exit
         cmp     al, 0
         jz      @@main_loop
-
 
     call    mouse_uninstall
     call    terminateProcess
@@ -867,6 +933,9 @@ dataseg
     _score \
         dd  0
 
+    _scoreCoefficient \
+        dd  50
+
     _palette \
         db  000h, 000h, 000h    ; 0 black
         db  0FFh, 000h, 000h    ; 1 red
@@ -890,7 +959,15 @@ dataseg
         dw  00100h      ; move down
 
     _moveMode \
-        db 0
+        db  0
+
+    _scoreText \
+        db  "SCORE: ", '$'
+
+    _scoreBuffer \
+        db  20 dup (?)
+
+    _foo dw 1234
 
 ; -------------------------------------------------------------------
 ; STACK
