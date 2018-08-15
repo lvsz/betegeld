@@ -215,6 +215,7 @@ proc drawGame
     mov     ecx, SCRWIDTH * SCRHEIGHT / 4
     rep     movsd
 
+	call	displayScore
     ret
 endp drawGame
 
@@ -271,7 +272,6 @@ proc animateMoves
 		
 	call	updateGame
 	call	drawGame
-	call	displayScore
 	call	delay
 	
 	ret
@@ -287,6 +287,10 @@ proc delay
 
 	mov		ch, dh	; save current second
 	add		ch, [byte ptr _delay] 	; delay for _delay amount of seconds
+	cmp		ch, 59					; if timestamp is higher than 59 seconds
+	jl		@@delaying
+	sub		ch, 59					; remove 59 from it
+	
 	@@delaying:   
 		push	cx
 		; get system time
@@ -303,8 +307,6 @@ endp delay
 
 proc mouseHandler
     uses    eax, ebx, ecx, edx
-
-	;call	displayScore
 	
 	; check if mouse is in playing field
     movzx   eax, dx					; copy absolute Y position
@@ -405,8 +407,7 @@ proc mouseHandler
         call    drawGame
 		
 	@@notInField:
-		call	displayScore
-        ret
+		ret
 endp mouseHandler
 
 
@@ -853,7 +854,6 @@ proc main
     @@main_loop:
         call    updateGame
         call    drawGame
-        call    displayScore
         call    processUserInput    ; returns al > 0 for exit
         cmp     al, 0
         jz      @@main_loop
