@@ -288,10 +288,10 @@ proc delay
 	add		ch, [byte ptr _delay] 	; delay for _delay amount of seconds
 	@@delaying:   
 		push	cx
-		; ;GET SYSTEM TIME.
+		; get system time
 		mov		ah, 2ch
-		int		21h ;RETURN SECONDS IN DH.
-		;CHECK IF ONE SECOND HAS PASSED. 
+		int		21h ; return seconds in dh
+		; check if _delay seconds have passed
 		pop		cx
 		cmp		ch, dh
 		jg		@@delaying
@@ -385,42 +385,37 @@ proc mouseHandler
 		neg		ah				; absolute value
 		
 	@@findMax:
+		pop		cx				; get back original values
 		cmp		al, ah			; find biggest coordinate
 		jge		@@largestX
 	
 		; largestY
-		pop		cx				; get back original values
-		cmp		ah, ch			; was y negative
-		jg		@@up			
-		add		bh, 001h		; it was negative, add "down" to _selectedTile's y
-		mov		[word ptr _cursorPos], bx
-		jmp		@@handleClick
-	
-	@@up:
-		add		bh, 0ffh		; it was positive, add "up" to _selectedTile's y
-		mov		[word ptr _cursorPos], bx
+		mov		bh, 1			; 
+		shr		ch, 7			; find sign of y
+		sub		bh, ch	
+		sub		bh, ch			; subtract sign from 1 twice, if positive, 1-0-0=1, negative, 1-1-1=-1
+		mov		cx, [word ptr _selectedTile]	; get base tile
+		add		ch, bh							; add up or down to it
+		mov		[word ptr _cursorPos], cx		; put it in cursorPos
 		jmp		@@handleClick
 	
 	@@largestX:
-		pop		cx				; get back original values
-		cmp		al, cl			; was x negative
-		jg		@@right			
-		inc		bl				; it was negative, add "left" to _selectedTile's x
-		mov		[word ptr _cursorPos], bx	; put it in _cursorPos
+		mov		bl, 1			; 
+		shr		cl, 7			; find sign of x
+		sub		bl, cl	
+		sub		bl, cl			; subtract sign from 1 twice, if positive, 1-0-0=1, negative, 1-1-1=-1
+		mov		cx, [word ptr _selectedTile]	; get base tile
+		add		cl, bl							; add right or left to it
+		mov		[word ptr _cursorPos], cx		; put it in cursorPos
 		jmp		@@handleClick
-	
-	@@right:
-		dec		bl				; it was positive, add "right" to _selectedTile's x
-		mov		[word ptr _cursorPos], bx
-		jmp		@@handleClick
-	
+		
 	@@handleClick:
 		pop		bx
 		cmp     bl, 1                   ; left-click?
 		jl      @@mouseHandled			; 0, no click
 		jg      @@deselect				; 1+, so deselect
 		cmp		[byte ptr _moveMode], 0	; swap or select?
-		jz		@@selectTile
+		je		@@selectTile
 		call	swapTiles, [word ptr _selectedTile]	; 1, so swap
 		
 	@@deselect:
@@ -462,15 +457,23 @@ proc processUserInput
 
     cmp     ah, 01h     ; ESC scan code
     je      @@done
+	
+	; cmp     ah, 036h	; RSHIFT scan code
+	; je		@@deselect
 
     @@continue_game:
         cmp     ah, 039h                ; SPACE scan code
-        jnz     @@move_cursor
-        cmp     [byte ptr _moveMode], 1 ; if _moveMode = 1 (switching) then space swaps
+        jne     @@move_cursor
+        cmp     [byte ptr _moveMode], 1 ; if _moveMode = 1 (swapping) then space swaps
         jne     @@selecting_tile        ; if _moveMode = 0 (selecting) then space selects
         call    swapTiles, [word ptr _selectedTile]
         mov     [byte ptr _moveMode], 0 ; set _moveMode to selecting mode
-        jmp     @@move_cursor
+		xor		al, al
+        jmp     short @@done
+		
+	@@deselect:
+		mov     [byte ptr _moveMode], 0 	; deselect
+		jmp		short @@done
 
     @@selecting_tile:               ; select the current cursor position
         call    selectTile
