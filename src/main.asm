@@ -271,7 +271,7 @@ proc animateMoves
 		
 	call	updateGame
 	call	drawGame
-		
+	call	displayScore
 	call	delay
 	
 	ret
@@ -333,6 +333,8 @@ endp printInt
 proc mouseHandler
     uses    eax, ebx, ecx, edx
 
+	;call	displayScore
+	
 	; check if mouse is in playing field
     movzx   eax, dx					; copy absolute Y position
     cmp     eax, BRDY0
@@ -432,6 +434,7 @@ proc mouseHandler
         call    drawGame
 		
 	@@notInField:
+		call	displayScore
         ret
 		
 endp mouseHandler
