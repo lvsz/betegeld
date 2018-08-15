@@ -215,6 +215,8 @@ proc drawGame
     mov     ecx, SCRWIDTH * SCRHEIGHT / 4
     rep     movsd
 
+    call    displayScore
+
     ret
 endp drawGame
 
@@ -246,7 +248,7 @@ proc swapTiles
     mov     dh, [eax]                               ; and the other value
     mov     [eax], dl                               ; swap
     mov     [ebx], dh
-	
+
     call    animateMoves
 
     push    eax
@@ -260,149 +262,149 @@ proc swapTiles
         pop     eax
         mov     [eax], dh   ; restore old value
         mov     [ebx], dl   ; restore old value
-		mov		[byte ptr _delay], 0
+        mov     [byte ptr _delay], 0
         call    animateMoves
-		mov		[byte ptr _delay], 1
+        mov     [byte ptr _delay], 1
 
         ret
 endp swapTiles
 
-proc animateMoves
-		
-	call	updateGame
-	call	drawGame
-		
-	call	delay
-	
-	ret
 
+proc animateMoves
+
+    call    updateGame
+    call    drawGame
+
+    call    delay
+
+    ret
 endp animateMoves
 
 
-proc delay  
-	uses	eax, ecx, edx
+proc delay
+    uses    eax, ecx, edx
 
-	mov		ah, 2ch	; get system time
-	int		21h
+    mov     ah, 2ch ; get system time
+    int     21h
 
-	mov		ch, dh	; save current second
-	add		ch, [byte ptr _delay] 	; delay for _delay amount of seconds
-	@@delaying:   
-		push	cx
-		; get system time
-		mov		ah, 2ch
-		int		21h ; return seconds in dh
-		; check if _delay seconds have passed
-		pop		cx
-		cmp		ch, dh
-		jg		@@delaying
-		
-	ret 
+    mov     ch, dh                  ; save current second
+    add     ch, [byte ptr _delay]   ; delay for _delay amount of seconds
+    @@delaying:
+        push    cx
+        ; get system time
+        mov     ah, 2ch
+        int     21h ; return seconds in dh
+        ; check if _delay seconds have passed
+        pop     cx
+        cmp     ch, dh
+        jg      @@delaying
+
+    ret
 endp delay
 
 
 proc mouseHandler
     uses    eax, ebx, ecx, edx
 
-	; check if mouse is in playing field
-    movzx   eax, dx					; copy absolute Y position
+    ; check if mouse is in playing field
+    movzx   eax, dx                 ; copy absolute Y position
     cmp     eax, BRDY0
-    jl      @@notInField			; skip if above field
+    jl      @@notInField            ; skip if above field
     cmp     eax, BRDY0 + BRDHEIGHT * TILESIZE
-    jge     @@notInField		; skip if below field
+    jge     @@notInField        ; skip if below field
 
-    sar     cx, 1					; need to halve absolute X position
+    sar     cx, 1                   ; need to halve absolute X position
     cmp     cx, BRDX0
-    jl      @@notInField		; skip if left of field, short override because @@notInField is close enough.
+    jl      @@notInField        ; skip if left of field, short override because @@notInField is close enough.
     cmp     cx, BRDX0 + BRDWIDTH * TILESIZE
-    jge     @@notInField		; skip if right of field
+    jge     @@notInField        ; skip if right of field
 
     push    bx              ; save button state until after cursor move
                             ; can't save it before ^^ checks,
                             ; otherwise stack messes up when mouse goes out of field
-	
-	; update _cursorPos with mouse coordinates
-	sub     eax, BRDY0
-	xor     edx, edx
-	mov     ebx, TILESIZE
-	div     ebx
-	mov     [byte ptr _cursorPos + 1], al   ; saves boardCoordinate Y position
-	mov     ax, cx
-	sub     ax, BRDX0
-	xor     edx, edx
-	div     ebx
-	mov     [byte ptr _cursorPos], al       ; saves boardCoordinate X position
-	
-	; swapping or selecting
-	cmp		[byte ptr _moveMode], 0
-	jz		short @@handleClick	; if _moveMode = 0 (selecting) then click will select
-	
-	; swappingTile:			; a tile has been selected, _moveMode = 1 (swapping)
-	mov		ax, [word ptr _cursorPos]
-	mov		bx, [word ptr _selectedTile]
-	sub		al, bl			; relative x coordinate, with bx being the centre now
-	sub		ah, bh			; relative y coordinate
-	
-	push	ax				; save relative coordinates
-	
-	; signX
-	cmp		al, 0			; is x positive
-	jge		@@signY
-	neg		al				; absolute value when x is negative
-	
-	@@signY:
-		cmp		ah, 0
-		jge		@@findMax
-		neg		ah				; absolute value
-		
-	@@findMax:
-		pop		cx				; get back original values
-		cmp		al, ah			; find biggest coordinate
-		jge		@@largestX
-	
-		; largestY
-		mov		bh, 1			; 
-		shr		ch, 7			; find sign of y
-		sub		bh, ch	
-		sub		bh, ch			; subtract sign from 1 twice, if positive, 1-0-0=1, negative, 1-1-1=-1
-		mov		cx, [word ptr _selectedTile]	; get base tile
-		add		ch, bh							; add up or down to it
-		mov		[word ptr _cursorPos], cx		; put it in cursorPos
-		jmp		@@handleClick
-	
-	@@largestX:
-		mov		bl, 1			; 
-		shr		cl, 7			; find sign of x
-		sub		bl, cl	
-		sub		bl, cl			; subtract sign from 1 twice, if positive, 1-0-0=1, negative, 1-1-1=-1
-		mov		cx, [word ptr _selectedTile]	; get base tile
-		add		cl, bl							; add right or left to it
-		mov		[word ptr _cursorPos], cx		; put it in cursorPos
-		jmp		@@handleClick
-		
-	@@handleClick:
-		pop		bx
-		cmp     bl, 1                   ; left-click?
-		jl      @@mouseHandled			; 0, no click
-		jg      @@deselect				; 1+, so deselect
-		cmp		[byte ptr _moveMode], 0	; swap or select?
-		je		@@selectTile
-		call	swapTiles, [word ptr _selectedTile]	; 1, so swap
-		
-	@@deselect:
-		mov     [byte ptr _moveMode], 0	; deselect tile
-		jmp		@@mouseHandled
-		
-	@@selectTile:
+
+    ; update _cursorPos with mouse coordinates
+    sub     eax, BRDY0
+    xor     edx, edx
+    mov     ebx, TILESIZE
+    div     ebx
+    mov     [byte ptr _cursorPos + 1], al   ; saves boardCoordinate Y position
+    mov     ax, cx
+    sub     ax, BRDX0
+    xor     edx, edx
+    div     ebx
+    mov     [byte ptr _cursorPos], al       ; saves boardCoordinate X position
+
+    ; swapping or selecting
+    cmp     [byte ptr _moveMode], 0
+    jz      short @@handleClick ; if _moveMode = 0 (selecting) then click will select
+
+    ; swappingTile:         ; a tile has been selected, _moveMode = 1 (swapping)
+    mov     ax, [word ptr _cursorPos]
+    mov     bx, [word ptr _selectedTile]
+    sub     al, bl          ; relative x coordinate, with bx being the centre now
+    sub     ah, bh          ; relative y coordinate
+
+    push    ax              ; save relative coordinates
+
+    ; signX
+    cmp     al, 0           ; is x positive
+    jge     @@signY
+    neg     al              ; absolute value when x is negative
+
+    @@signY:
+        cmp     ah, 0
+        jge     @@findMax
+        neg     ah              ; absolute value
+
+    @@findMax:
+        pop     cx              ; get back original values
+        cmp     al, ah          ; find biggest coordinate
+        jge     @@largestX
+
+        ; largestY
+        mov     bh, 1           ;
+        shr     ch, 7           ; find sign of y
+        sub     bh, ch
+        sub     bh, ch          ; subtract sign from 1 twice, if positive, 1-0-0=1, negative, 1-1-1=-1
+        mov     cx, [word ptr _selectedTile]    ; get base tile
+        add     ch, bh                          ; add up or down to it
+        mov     [word ptr _cursorPos], cx       ; put it in cursorPos
+        jmp     @@handleClick
+
+    @@largestX:
+        mov     bl, 1           ;
+        shr     cl, 7           ; find sign of x
+        sub     bl, cl
+        sub     bl, cl          ; subtract sign from 1 twice, if positive, 1-0-0=1, negative, 1-1-1=-1
+        mov     cx, [word ptr _selectedTile]    ; get base tile
+        add     cl, bl                          ; add right or left to it
+        mov     [word ptr _cursorPos], cx       ; put it in cursorPos
+        jmp     @@handleClick
+
+    @@handleClick:
+        pop     bx
+        cmp     bl, 1                   ; left-click?
+        jl      @@mouseHandled          ; 0, no click
+        jg      @@deselect              ; 1+, so deselect
+        cmp     [byte ptr _moveMode], 0 ; swap or select?
+        je      @@selectTile
+        call    swapTiles, [word ptr _selectedTile] ; 1, so swap
+
+    @@deselect:
+        mov     [byte ptr _moveMode], 0 ; deselect tile
+        jmp     @@mouseHandled
+
+    @@selectTile:
         call    selectTile
-        mov     [byte ptr _moveMode], 1	; set _moveMode to swapping mode
-		jmp		@@mouseHandled
-		
-	@@mouseHandled:
+        mov     [byte ptr _moveMode], 1 ; set _moveMode to swapping mode
+        jmp     @@mouseHandled
+
+    @@mouseHandled:
         call    updateGame
         call    drawGame
-		
-	@@notInField:
+
+    @@notInField:
         ret
 endp mouseHandler
 
@@ -426,28 +428,37 @@ proc processUserInput
     int     16h         ; keyboard interrupt
 
     cmp     ah, 01h     ; ESC scan code
-    je      @@done
-	
-	; cmp     ah, 036h	; RSHIFT scan code
-	; je		@@deselect
+    je      @@done + 4
+
+    ; cmp     ah, 036h  ; RSHIFT scan code
+    ; je        @@deselect
 
     @@continue_game:
         cmp     ah, 039h                ; SPACE scan code
-        jne     @@move_cursor
+        jne     @@maybe_move_cursor
         cmp     [byte ptr _moveMode], 1 ; if _moveMode = 1 (switching) then space swaps
         jne     @@selecting_tile        ; if _moveMode = 0 (selecting) then space selects
         call    swapTiles, [word ptr _selectedTile]
         mov     [byte ptr _moveMode], 0 ; set _moveMode to selecting mode
-        xor     al, al
-        jmp     short @@done
-    
-    @@deselect:
-        mov     [byte ptr _moveMode], 0 	; deselect
-        jmp     short @@done
+        jmp     @@done
 
-    @@selecting_tile:               ; select the current cursor position
+    @@deselect:
+        mov     [byte ptr _moveMode], 0 ; deselect
+        jmp     @@done
+
+    @@selecting_tile:                   ; select the current cursor position
         call    selectTile
         mov     [byte ptr _moveMode], 1 ; set _moveMode to swapping mode
+
+    @@maybe_move_cursor:
+        cmp     ah, 4bh         ; check if key is LEFT
+        je      @@move_cursor
+        cmp     ah, 4dh         ; check if key is RIGHT
+        je      @@move_cursor
+        cmp     ah, 48h         ; check if key is UP
+        je      @@move_cursor
+        cmp     ah, 50h         ; check if key is DOWN
+        jne     @@done
 
     @@move_cursor:
         ; check for cursor movements
@@ -460,7 +471,6 @@ proc processUserInput
         add     dh, bh                              ; use as an efficient modulo
         and     dx, 0707h
         mov     [word ptr offset _cursorPos], dx
-        xor     al, al                              ; clean up eax before returning
         jmp     @@done
 
     @@limited_move:
@@ -489,9 +499,9 @@ proc processUserInput
 
         @@finish_move:
             mov     [word ptr offset _cursorPos], dx
-            xor     al, al      ; clean up eax before returning
 
     @@done:
+        xor     al, al  ; clean up eax before returning
         ret
 endp processUserInput
 
@@ -511,6 +521,9 @@ proc addScore
     ret
 endp addScore
 
+
+; searches for rows with 3+ consecutive tiles of the same color
+; updates score dependent of length of match found
 proc matchRows
     uses    ebx, ecx, edi, esi
 
@@ -565,6 +578,8 @@ proc matchRows
 endp matchRows
 
 
+; searches a column with 3+ consecutive tiles of the same color
+; updates score dependent of length of match found
 proc matchOneColumn
     arg     @@col: dword
     uses    ecx, ebx, edi, esi
@@ -579,21 +594,15 @@ proc matchOneColumn
         cmpsb   ; derefs & compares esi & ebi, then adds 1 to both pointers
         lea     esi, [esi + BRDWIDTH - 1]   ; -1 because cmpsb already did +1
         lea     edi, [edi + BRDWIDTH - 1]
-        jne     @@no_match
+        jne     @@check_for_match
         inc     ebx
         dec     ecx
         jnz     @@loop
-        @@no_match:
-            cmp     ebx, 2
-            jge     @@process_match ; enough tiles matched
-            @@process_match_return:
-                xor     ebx, ebx
-                cmp     ecx, 3      ; check how many left to compare
-                jl      @@done      ; if fewer than 3, no more matches possible
-                dec     ecx
-                jmp     @@loop
 
-    @@process_match:
+    @@check_for_match:
+        cmp     ebx, 2
+        jl      @@no_match
+        ; process match
         push    esi
         push    edi
         inc     ebx
@@ -607,13 +616,20 @@ proc matchOneColumn
             jnz     @@copy
         pop     edi
         pop     esi
-        jmp     @@process_match_return
+
+    @@no_match:
+        xor     ebx, ebx
+        cmp     ecx, 3      ; check how many left to compare
+        jl      @@done      ; if fewer than 3, no more matches possible
+        dec     ecx
+        jmp     @@loop
 
     @@done:
         ret
 endp matchOneColumn
 
 
+; calls matchOneColumn on all columns
 proc matchColumns
     uses ebx
 
@@ -667,6 +683,17 @@ proc checkForMatches
 endp checkForMatches
 
 
+proc checkForPotentialMatches
+
+    mov     esi, offset _board
+    mov     edi, offset _board + 1
+
+    @@loop:
+        repne   cmpsb
+
+endp checkForPotentialMatches
+
+
 ; collapse tiles so there's no more empty space between them
 proc collapseTiles
     uses    eax, ebx, ecx
@@ -694,11 +721,11 @@ proc collapseTiles
             jmp     @@loop
 
     @@done:
-        call	animateMoves
-        call	refillDrops
-		mov		[byte ptr _delay], 0
         call    animateMoves
-		mov		[byte ptr _delay], 1
+        call    refillDrops
+        mov     [byte ptr _delay], 0
+        call    animateMoves
+        mov     [byte ptr _delay], 1
         ret
 endp collapseTiles
 
@@ -843,14 +870,15 @@ proc main
     call    updateColourPalette
     call    mouse_install, offset mouseHandler
 
+    mov     [byte ptr _delay], 0
     call    fillBoard
     call    checkForMatches
+    mov     [byte ptr _delay], 1
     mov     [dword ptr _score], 0   ; reset any score from filling board
 
     @@main_loop:
         call    updateGame
         call    drawGame
-        call    displayScore
         call    processUserInput    ; returns al > 0 for exit
         cmp     al, 0
         jz      @@main_loop
@@ -868,7 +896,7 @@ dataseg
     _test \
         db 1
         db 1
-	
+
     msg_no_mouse \
         db 'Hij komt hier wel é', 0dh, 0ah, '$'
 
@@ -880,9 +908,9 @@ dataseg
         db  0
         db  0
 
-	_delay \
-		db 1
-		
+    _delay \
+        db 1
+
     _drops \
         db  (BRDWIDTH * BRDHEIGHT) dup (?)
 
@@ -936,8 +964,6 @@ dataseg
 
     _scoreBuffer \
         db  20 dup (?)
-
-    _foo dw 1234
 
 ; -------------------------------------------------------------------
 ; STACK
