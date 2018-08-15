@@ -278,6 +278,7 @@ proc animateMoves
 
 endp animateMoves
 
+
 proc delay  
 	uses	eax, ecx, edx
 
@@ -298,36 +299,6 @@ proc delay
 		
 	ret 
 endp delay
-
-proc printInt
-    arg     @@int:dword
-    uses    eax, ebx, edx
-
-    xor     edx, edx
-    mov     ebx, 10
-    mov     eax, [@@int]
-    push    eax
-
-    @@loop:
-
-        div     ebx
-        push    edx
-        cmp     eax, 0
-        jne     @@loop
-
-    @@loop2:
-        pop     edx
-
-        mov     ah, 2h
-        add     edx, 48
-        int     21h
-
-        sub     edx, 48
-        cmp     edx, [@@int]
-        jne     @@loop2
-
-    ret
-endp printInt
 
 
 proc mouseHandler
@@ -433,7 +404,6 @@ proc mouseHandler
 		
 	@@notInField:
         ret
-		
 endp mouseHandler
 
 
@@ -464,16 +434,16 @@ proc processUserInput
     @@continue_game:
         cmp     ah, 039h                ; SPACE scan code
         jne     @@move_cursor
-        cmp     [byte ptr _moveMode], 1 ; if _moveMode = 1 (swapping) then space swaps
+        cmp     [byte ptr _moveMode], 1 ; if _moveMode = 1 (switching) then space swaps
         jne     @@selecting_tile        ; if _moveMode = 0 (selecting) then space selects
         call    swapTiles, [word ptr _selectedTile]
         mov     [byte ptr _moveMode], 0 ; set _moveMode to selecting mode
-		xor		al, al
+        xor     al, al
         jmp     short @@done
-		
-	@@deselect:
-		mov     [byte ptr _moveMode], 0 	; deselect
-		jmp		short @@done
+    
+    @@deselect:
+        mov     [byte ptr _moveMode], 0 	; deselect
+        jmp     short @@done
 
     @@selecting_tile:               ; select the current cursor position
         call    selectTile
