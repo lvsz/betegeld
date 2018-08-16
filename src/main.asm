@@ -85,6 +85,20 @@ proc fillBackground
 endp fillBackground
 
 
+; returns a random color for a tile in eax
+proc randomColor
+    uses ebx, edx
+
+    xor     edx, edx
+    mov     ebx, TCOLORS
+    call    rand
+    div     ebx
+    inc     edx
+    mov     eax, edx
+    ret
+endp randomColor
+
+
 proc drawTile
     arg     @@x: word, @@y: word, @@color: byte
     uses    eax, ecx, edx, edi
@@ -182,6 +196,7 @@ endp drawCursor
 
 proc updateGame
     uses    eax
+
     call    updateBoard
     movzx   eax, [word ptr _cursorPos]
     call    drawCursor, eax
@@ -217,7 +232,14 @@ proc drawGame
 
     call    displayScore
 
+    cmp     [byte ptr _gameOver], 1
+    je      @@game_over
+
     ret
+
+    @@game_over:
+        call    displayString, offset _gameOverString, 13, 15
+        ret
 endp drawGame
 
 
@@ -252,10 +274,11 @@ proc swapTiles
     call    animateMoves
 
     push    eax
-    call    checkForMatches ; return 0 in eax if no match made
+    call    checkForMatches     ; return 0 in eax if no match made
     cmp     eax, 0
-    je      @@undo_swap     ; in case of no match, move is invalid
+    je      @@undo_swap         ; in case of no match, move is invalid
     pop     eax
+    call    potentialMatches    ; check if there are still valid moves left
     ret
 
     @@undo_swap:
@@ -428,7 +451,7 @@ proc processUserInput
     int     16h         ; keyboard interrupt
 
     cmp     ah, 01h     ; ESC scan code
-    je      @@done + 4
+    je      @@done + 2  ; jump to @@done, skip "xor al, al" part
 
     ; cmp     ah, 036h  ; RSHIFT scan code
     ; je        @@deselect
@@ -683,46 +706,204 @@ proc checkForMatches
 endp checkForMatches
 
 
-proc checkForPotentialMatches
+; transposes the board, used for checking potential matches
+proc transposeBoard
+    uses eax, ebx, ecx, esi, edi
 
     mov     esi, offset _board
-    mov     edi, offset _board + 1
+    mov     edi, offset _transposedBoard
+    mov     ecx, BRDWIDTH / 4
 
     @@loop:
-        repne   cmpsb
+        push    edi ; save edi to undo changes while filling a column
+        @@fill_column:
+            lodsd   ; load 4 tiles at once in eax
+            mov     [byte ptr edi + 0 * BRDHEIGHT], al
+            mov     [byte ptr edi + 1 * BRDHEIGHT], ah
+            shr     eax, 16 ; bitshift 16 bits to access the other half of eax
+            mov     [byte ptr edi + 2 * BRDHEIGHT], al
+            mov     [byte ptr edi + 3 * BRDHEIGHT], ah
+            add     edi, BRDHEIGHT * 4
+            dec     ecx
+            jnz     @@fill_column
+        mov     ecx, BRDWIDTH / 4
+        pop     edi
+        inc     edi ; increase edi to fill out the next column
+        cmp     edi, offset _transposedBoard + BRDHEIGHT
+        jl      @@loop
 
-endp checkForPotentialMatches
+    ret
+endp transposeBoard
+
+
+; checks for patterns that allow a match with a single move
+; call with _board to check each row
+; call with _transposedBoard to check each column of _board
+proc potentialMatchesHelper
+    arg @@board:dword
+    uses eax, ebx, ecx, esi, edi
+
+    mov     esi, [@@board]
+    lea     edi, [esi + 1]
+    mov     ebx, BRDHEIGHT
+    mov     ecx, BRDWIDTH
+
+    ; searches for 2 matching adjacent tiles
+    ; then see if there's a 3rd tile that can be moved to create a match
+    ; only need one, so exit once found
+    @@row_check_1:
+        repne   cmpsb   ; repeat while [esi] & [edi] are not equal
+        cmp     ecx, 0  ; 0 means end of row, go to next
+        je      @@row_next_1
+
+        mov     al, [byte ptr esi]
+
+        ; each test checks if there's a 3rd tile in the data that could
+        ; be used to form a match
+        ; when true, do a bounds check to make sure the move doesn't have
+        ; to cross any borders to form the match
+
+        @@test1:
+        cmp     al, [byte ptr esi + 1 + BRDWIDTH]   ; MM_
+        jne     @@test2                             ; __M
+        cmp     ecx, 1  ; ecx = 1 means we're in last column
+        jne     @@true
+
+        @@test2:
+        cmp     al, [byte ptr esi + 1 - BRDWIDTH]   ; __M
+        jne     @@test3                             ; MM_
+        cmp     ecx, 1  ; ecx = 1 means we're in last column
+        jne     @@true
+
+        @@test3:
+        cmp     al, [byte ptr esi + 2]              ; MM_M
+        jne     @@test4
+        cmp     ecx, 2  ; ecx = 2 means we're in penultimate column
+        jg      @@true
+
+        @@test4:
+        cmp     ecx, BRDWIDTH - 1   ; check if we're in 1st column
+        je      @@row_check_1       ; if true, possibilities are exhausted
+
+        cmp     al, [byte ptr esi - 2 + BRDWIDTH]   ; _MM
+        je      @@true                              ; M__
+
+        @@test5:
+        cmp     al, [byte ptr esi - 2 - BRDWIDTH]   ; M__
+        je      @@true                              ; _MM
+
+        @@test6:
+        cmp     al, [byte ptr esi - 3]               ; M_MM
+        jne     @@row_check_1
+        cmp     ecx, BRDWIDTH - 2   ; check if we're in 2nd column
+        jne     @@true
+
+
+    @@row_next_1:
+        mov     ecx, BRDWIDTH
+        dec     ebx
+        jnz     @@row_check_1
+
+
+    ; the next part checks for matches that can be made by
+    ; swapping a tile in between 2 others
+    mov     esi, [@@board]
+    lea     edi, [esi + 2]
+    mov     ebx, BRDHEIGHT
+    mov     ecx, BRDWIDTH
+
+    @@row_check_2:
+        repne   cmpsb
+        cmp     ecx, 0
+        je      @@row_next_2
+
+        mov     al, [byte ptr esi - 1]
+
+        cmp     al, [byte ptr esi + BRDWIDTH]   ; M_M
+        je      @@true                          ; _M_
+
+        cmp     al, [byte ptr esi - BRDWIDTH]   ; _M_
+        je      @@true                          ; M_M
+        jmp     @@row_check_2
+
+    @@row_next_2:
+        dec     ebx
+        mov     ecx, BRDWIDTH
+        jnz     @@row_check_2
+
+    ; getting here means no match was found
+    ; return 0 in al
+    xor     al, al
+    ret
+
+    @@true:
+        mov     al, 1
+        ret
+
+endp potentialMatchesHelper
+
+
+; through the helper, it returns result in al
+; 1 if there's at least one potential match, 0 otherwise
+; 0 potential matches means game over
+proc potentialMatches
+    call    potentialMatchesHelper, offset _board
+    cmp     al, 1
+    je      @@done  ; if first call was successful, we can exit
+    call    transposeBoard
+    call    potentialMatchesHelper, offset _transposedBoard
+    cmp     al, 1
+    je      @@done
+    mov     [byte ptr _gameOver], 1
+
+    @@done:
+        ret
+endp potentialMatches
 
 
 ; collapse tiles so there's no more empty space between them
+; also generates new tiles for places that remain empty
 proc collapseTiles
-    uses    eax, ebx, ecx
+    uses    eax, ebx, esi
 
     call    animateMoves
 
-    mov     ecx, offset _board + BRDWIDTH * BRDHEIGHT
+    mov     esi, offset _board + BRDWIDTH * BRDHEIGHT - 1
+    mov     edi, esi
 
     @@loop:
-        dec     ecx
-        cmp     ecx, offset _board
-        jl      @@done
-        cmp     [byte ptr ecx], 0
-        jne     @@loop
-        lea     ebx, [ecx - BRDWIDTH]
-        @@find_tile_above:
-            cmp     [byte ptr ebx], 0
-            jne     @@collapse
-            lea     ebx, [ebx - BRDWIDTH]
-            jmp     @@find_tile_above
-        @@collapse:
-            mov     ah, [byte ptr ebx]
-            mov     [byte ptr ecx], ah
-            mov     [byte ptr ebx], 0
-            jmp     @@loop
+        cmp     [byte ptr esi], 0
+        je      @@find_tile
+        @@found_tile:
+            dec     esi
+            cmp     esi, offset _board
+            jge     @@loop
+            jmp     @@done
+
+    @@find_tile:
+        mov     ebx, esi
+        sub     ebx, BRDWIDTH
+        cmp     ebx, offset _board
+        jl      @@insert_random_tiles   ; no more tiles, insert new
+        cmp     [byte ptr ebx], 0
+        je      @@find_tile + 2         ; jump back, but skip 1st instruction
+        mov     al, [byte ptr ebx]
+        mov     [byte ptr esi], al
+        mov     [byte ptr ebx], 0
+        jmp     @@found_tile
+
+    ; random tiles are only needed when the top of the column is empty
+    ; this section immediately fills the entire column
+    @@insert_random_tiles:
+        add     ebx, BRDWIDTH
+        call    randomColor
+        mov     [byte ptr ebx], al
+        cmp     ebx, esi
+        jge     @@found_tile            ; entire column has been filled
+        jmp     @@insert_random_tiles
 
     @@done:
         call    animateMoves
-        call    refillDrops
         mov     [byte ptr _delay], 0
         call    animateMoves
         mov     [byte ptr _delay], 1
@@ -730,50 +911,41 @@ proc collapseTiles
 endp collapseTiles
 
 
-proc refillDrops
-    uses eax, ebx, ecx, edx
-
-    mov     ebx, TCOLORS
-    mov     ecx, offset _drops + BRDWIDTH * BRDHEIGHT
-
-    @@loop:
-        dec     ecx
-        cmp     ecx, offset _drops
-        jl      @@done
-        cmp     [byte ptr ecx], 0
-        jne     @@loop
-        call    rand
-        xor     edx, edx
-        div     ebx                 ; use div to get remainder of eax / 7
-        inc     dl                  ; tile colors are between 1 & 7
-        mov     [byte ptr ecx], dl  ; move value to empty tile
-        jmp     @@loop
-
-    @@done:
-        ret
-endp refillDrops
-
-
-; fills both visible _board & invisible _drops
+; fills board with random tiles
 proc fillBoard
-    uses eax, ebx, ecx, edx, edi
+    uses eax, ebx, ecx, edi
 
-    mov     edi, offset _drops
-    mov     ecx, 2 * BRDWIDTH * BRDHEIGHT
+    mov     edi, offset _board
+    mov     ecx, BRDWIDTH * BRDHEIGHT
     mov     ebx, TCOLORS
 
     @@loop:
-        xor     edx, edx
-        call    rand
-        div     ebx     ; divide to get remainder
-        inc     dl      ; tile colors are between 1 & 7
-        mov     al, dl  ; move remainder to al
-        stosb           ; store value of al into edi
+        call    randomColor ; put a random color in al
+        stosb               ; store value of al into edi
         dec     ecx
         jnz     @@loop
 
     ret
 endp fillBoard
+
+
+proc displayString
+    arg @@string:dword, @@row:byte, @@col:byte
+    uses eax, ebx, ecx, edx, edi
+
+    ;mov     dx, 0201h   ; set cursor position to row 2 & column 1
+    mov     dh, [@@row]
+    mov     dl, [@@col]
+    xor     bx, bx
+    mov     ah, 2h      ; function to set cursor position
+    int     10h         ; video mode interrupt
+
+    mov     edx, [@@string] ; gets the string string
+    mov     ah, 9h          ; function to display string
+    int     21h             ; displays string
+
+    ret
+endp displayString
 
 
 ; displays current score on screen
@@ -911,19 +1083,28 @@ dataseg
     _delay \
         db 1
 
-    _drops \
-        db  (BRDWIDTH * BRDHEIGHT) dup (?)
+    _rowBuffer1 \
+        db  BRDWIDTH dup (0)
 
     _board \
         db  (BRDWIDTH * BRDHEIGHT) dup (?)
-        ;db   1,  1,  2,  2,  1,  1,  2,  2  ; row 0
-        ;db   1,  1,  2,  2,  1,  1,  2,  2  ; row 1
-        ;db   4,  3,  1,  1,  3,  3,  1,  1  ; row 2
-        ;db   4,  4,  1,  1,  4,  4,  1,  1  ; row 3
-        ;db   1,  6,  5,  5,  6,  6,  5,  5  ; row 4
-        ;db   6,  6,  5,  5,  6,  6,  5,  5  ; row 5
-        ;db   7,  7,  6,  6,  7,  7,  6,  6  ; row 6
-        ;db   1,  2,  3,  4,  5,  6,  7,  1  ; row 7
+        ;db  1,1,2,2,1,1,2,2
+        ;db  1,1,2,2,1,1,2,2
+        ;db  3,3,4,4,3,3,4,4
+        ;db  3,3,4,4,3,3,4,4
+        ;db  1,1,2,2,5,1,2,2
+        ;db  1,1,2,2,5,1,2,2
+        ;db  3,3,4,5,3,3,4,4
+        ;db  3,3,4,4,3,3,4,4
+
+    _rowBuffer2 \
+        db  BRDWIDTH dup (0)
+
+    _transposedBoard \
+        db  (BRDWIDTH * BRDHEIGHT) dup (8)
+
+    _rowBuffer3 \
+        db  BRDWIDTH dup (0)
 
     _matches \
         db  (BRDWIDTH * BRDHEIGHT) dup (0)
@@ -964,6 +1145,12 @@ dataseg
 
     _scoreBuffer \
         db  20 dup (?)
+
+    _gameOver \
+        db  0
+
+    _gameOverString \
+        db  "GAME OVER", '$'
 
 ; -------------------------------------------------------------------
 ; STACK
