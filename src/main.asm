@@ -16,6 +16,7 @@ BRDWIDTH  equ 8         ; number of tiles that fit in a board's row
 BRDHEIGHT equ 8         ; number of tiles that fit in a board's column
 BRDX0     equ ((SCRWIDTH - BRDWIDTH * TILESIZE) / 2)
 BRDY0     equ (SCRHEIGHT - BRDHEIGHT * TILESIZE)
+STDDELAY  equ 1         ; standard delay in seconds
 
 NCOLORS   equ 9         ; number of colors used
 TCOLORS   equ 7         ; number of colors used for tile
@@ -287,9 +288,9 @@ proc swapTiles
         mov     [ebx], dl   ; restore old value
         mov     [byte ptr _delay], 0
         call    animateMoves
-        mov     [byte ptr _delay], 1
+        mov     [byte ptr _delay], STDDELAY
 
-        ret
+    ret
 endp swapTiles
 
 
@@ -297,7 +298,6 @@ proc animateMoves
 
     call    updateGame
     call    drawGame
-
     call    delay
 
     ret
@@ -307,22 +307,24 @@ endp animateMoves
 proc delay
     uses    eax, ecx, edx
 
+    cmp     [byte ptr _delayActivate], 0
+    je      @@done
+
     mov     ah, 2ch ; get system time
     int     21h
+    add     dh, [byte ptr _delay]       ; set target second
+    cmp     dh, 60                      ; does it go past 59
+    jl      $+5                         ; jump over mod
+    sub     dh, 60                      ; mod 60
+    mov     [byte ptr _seconds], dh     ; save target second
 
-    mov     ch, dh                  ; save current second
-    add     ch, [byte ptr _delay]   ; delay for _delay amount of seconds
     @@delaying:
-        push    cx
-        ; get system time
-        mov     ah, 2ch
-        int     21h ; return seconds in dh
-        ; check if _delay seconds have passed
-        pop     cx
-        cmp     ch, dh
-        jg      @@delaying
+        int     21h
+        cmp     dh, [byte ptr _seconds]     ; compare new second with target
+        jne     @@delaying                  ; wait until they are equal
 
-    ret
+    @@done:
+        ret
 endp delay
 
 
@@ -423,8 +425,8 @@ proc mouseHandler
         mov     [byte ptr _moveMode], 1 ; set _moveMode to swapping mode
         jmp     @@mouseHandled
 
-    @@mouseHandled:
-        call    updateGame
+    @@mouseHandled:                     ; since mouseHandler is via an interrupt
+        call    updateGame              ; we need to update the game here too
         call    drawGame
 
     @@notInField:
@@ -741,7 +743,7 @@ endp transposeBoard
 ; call with _transposedBoard to check each column of _board
 proc potentialMatchesHelper
     arg @@board:dword
-    uses eax, ebx, ecx, esi, edi
+    uses ebx, ecx, esi, edi
 
     mov     esi, [@@board]
     lea     edi, [esi + 1]
@@ -767,13 +769,13 @@ proc potentialMatchesHelper
         cmp     al, [byte ptr esi + 1 + BRDWIDTH]   ; MM_
         jne     @@test2                             ; __M
         cmp     ecx, 1  ; ecx = 1 means we're in last column
-        jne     @@true
+        jne     short @@true
 
         @@test2:
         cmp     al, [byte ptr esi + 1 - BRDWIDTH]   ; __M
         jne     @@test3                             ; MM_
         cmp     ecx, 1  ; ecx = 1 means we're in last column
-        jne     @@true
+        jne     short @@true
 
         @@test3:
         cmp     al, [byte ptr esi + 2]              ; MM_M
@@ -1042,11 +1044,18 @@ proc main
     call    updateColourPalette
     call    mouse_install, offset mouseHandler
 
-    mov     [byte ptr _delay], 0
+    @@random_game_over:
+
     call    fillBoard
     call    checkForMatches
-    mov     [byte ptr _delay], 1
-    mov     [dword ptr _score], 0   ; reset any score from filling board
+
+    mov     [byte ptr _gameOver], 0
+    call    potentialMatches
+    cmp     [byte ptr _gameOver], 1
+    je      @@random_game_over              ; no moves possible, redo
+
+    mov     [dword ptr _score], 0           ; reset score from filling board
+    mov     [byte ptr _delayActivate], 1    ; activate delay
 
     @@main_loop:
         call    updateGame
@@ -1081,7 +1090,13 @@ dataseg
         db  0
 
     _delay \
-        db 1
+        db STDDELAY
+
+    _delayActivate \
+        db  0
+
+    _seconds \
+        db ?
 
     _rowBuffer1 \
         db  BRDWIDTH dup (0)
