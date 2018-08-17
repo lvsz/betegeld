@@ -16,7 +16,7 @@ BRDWIDTH  equ 8         ; number of tiles that fit in a board's row
 BRDHEIGHT equ 8         ; number of tiles that fit in a board's column
 BRDX0     equ ((SCRWIDTH - BRDWIDTH * TILESIZE) / 2)
 BRDY0     equ (SCRHEIGHT - BRDHEIGHT * TILESIZE)
-STDDELAY  equ 1         ; standard delay in seconds
+STDDELAY  equ 3         ; standard delay in 1/10th seconds
 
 NCOLORS   equ 9         ; number of colors used
 TCOLORS   equ 7         ; number of colors used for tile
@@ -47,11 +47,11 @@ proc setVideoMode
 endp setVideoMode
 
 
-proc updateColourPalette
+proc updateColorPalette
     uses    eax, ecx, edx, esi
 
-    mov     esi, offset _palette ; pointer to source palette
-    mov     ecx, NCOLORS   ; amount of colours to read
+    mov     esi, [dword ptr _currentPalette]    ; pointer to source palette
+    mov     ecx, NCOLORS                        ; amount of colours to read
 
     ; multiply ecx by 3 (3 color components per color)
     ; do it efficiently (2*ecx + ecx)
@@ -67,7 +67,24 @@ proc updateColourPalette
     rep     outsb
 
     ret
-endp updateColourPalette
+endp updateColorPalette
+
+
+proc changeColorPalette
+    uses    eax, ebx, edx, edx
+
+    mov     eax, [dword ptr _currentPalette]
+    sub     eax, offset _palette_1
+    add     eax, 3 * NCOLORS
+    mov     ebx, [dword ptr _endPalette]
+    xor     edx, edx
+    div     ebx
+    add     edx, offset _palette_1
+    mov     [dword ptr _currentPalette], edx
+    call    updateColorPalette
+
+    ret
+endp changeColorPalette
 
 
 proc fillBackground
@@ -310,18 +327,10 @@ proc delay
     cmp     [byte ptr _delayActivate], 0
     je      @@done
 
-    mov     ah, 2ch ; get system time
-    int     21h
-    add     dh, [byte ptr _delay]       ; set target second
-    cmp     dh, 60                      ; does it go past 59
-    jl      $+5                         ; jump over mod
-    sub     dh, 60                      ; mod 60
-    mov     [byte ptr _seconds], dh     ; save target second
-
-    @@delaying:
-        int     21h
-        cmp     dh, [byte ptr _seconds]     ; compare new second with target
-        jne     @@delaying                  ; wait until they are equal
+    mov     ah, 86h
+    movzx   cx, [byte ptr _delay]
+    xor     dx, dx
+    int     15h
 
     @@done:
         ret
@@ -459,12 +468,18 @@ proc processUserInput
     ; je        @@deselect
 
     @@continue_game:
+        cmp     ah, 02Eh
+        je      @@change_color
         cmp     ah, 039h                ; SPACE scan code
         jne     @@maybe_move_cursor
         cmp     [byte ptr _moveMode], 1 ; if _moveMode = 1 (switching) then space swaps
         jne     @@selecting_tile        ; if _moveMode = 0 (selecting) then space selects
         call    swapTiles, [word ptr _selectedTile]
         mov     [byte ptr _moveMode], 0 ; set _moveMode to selecting mode
+        jmp     @@done
+
+    @@change_color:
+        call    changeColorPalette
         jmp     @@done
 
     @@deselect:
@@ -908,7 +923,7 @@ proc collapseTiles
         call    animateMoves
         mov     [byte ptr _delay], 0
         call    animateMoves
-        mov     [byte ptr _delay], 1
+        mov     [byte ptr _delay], STDDELAY
         ret
 endp collapseTiles
 
@@ -1041,7 +1056,7 @@ proc main
     @@mouse_present:
 
     call    setVideoMode, 13h
-    call    updateColourPalette
+    call    updateColorPalette
     call    mouse_install, offset mouseHandler
 
     @@random_game_over:
@@ -1062,7 +1077,7 @@ proc main
         call    drawGame
         call    processUserInput    ; returns al > 0 for exit
         cmp     al, 0
-        jz      @@main_loop
+        je      @@main_loop
 
     call    mouse_uninstall
     call    terminateProcess
@@ -1130,17 +1145,6 @@ dataseg
     _scoreCoefficient \
         dd  50
 
-    _palette \
-        db  000h, 000h, 000h    ; 0 black
-        db  0FFh, 000h, 000h    ; 1 red
-        db  000h, 0FFh, 000h    ; 2 green
-        db  000h, 000h, 0FFh    ; 3 blue
-        db  0FFh, 0FFh, 000h    ; 4 yellow
-        db  0FFh, 0A5h, 000h    ; 5 orange
-        db  000h, 0FFh, 0FFh    ; 6 cyan
-        db  0FFh, 0D9h, 0BFh    ; 7 pink
-        db  0FFh, 0FFh, 0FFh    ; 8 white
-
     ; indices based on keyboard scan codes
     _moves \
         dw  72 dup (?)
@@ -1166,6 +1170,45 @@ dataseg
 
     _gameOverString \
         db  "GAME OVER", '$'
+
+    _palette_1 \
+        db  000h, 000h, 000h    ; 0 black
+        db  0FFh, 000h, 000h    ; 1 red
+        db  000h, 0FFh, 000h    ; 2 green
+        db  000h, 000h, 0FFh    ; 3 blue
+        db  0FFh, 0FFh, 000h    ; 4 yellow
+        db  0FFh, 0A5h, 000h    ; 5 orange
+        db  000h, 0FFh, 0FFh    ; 6 cyan
+        db  0FFh, 0D9h, 0BFh    ; 7 pink
+        db  0FFh, 0FFh, 0FFh    ; 8 white
+
+    _palette_2 \
+        db  010h, 009h, 00Dh    ; 0 black
+        db  0FFh, 0C3h, 0E2h    ; 1
+        db  08Bh, 0FEh, 0A8h    ; 2
+        db  0C7h, 09Bh, 0F2h    ; 3
+        db  0FFh, 0FFh, 0E3h    ; 4
+        db  0FFh, 0A8h, 0A8h    ; 5
+        db  0A4h, 0F0h, 0B7h    ; 6
+        db  0EEh, 0DDh, 0BDh    ; 7
+        db  0FFh, 0FFh, 0FFh    ; 8
+
+    _palette_3 \
+        db  000h, 000h, 055h    ; 0 black
+        db  0FFh, 0C3h, 0FFh    ; 1
+        db  08Bh, 0FEh, 0FFh    ; 2
+        db  0C7h, 09Bh, 0FFh    ; 3
+        db  0FFh, 0FFh, 0EEh    ; 4
+        db  0FFh, 0A8h, 0FFh    ; 5
+        db  0A4h, 0F0h, 0FFh    ; 6
+        db  0EEh, 0DDh, 0FFh    ; 7
+        db  0FFh, 0FFh, 0FFh    ; 8
+
+    _endPalette \
+        dd  ($ - offset _palette_1)
+
+    _currentPalette \
+        dd  offset _palette_1
 
 ; -------------------------------------------------------------------
 ; STACK
