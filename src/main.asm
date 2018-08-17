@@ -16,7 +16,7 @@ BRDWIDTH  equ 8         ; number of tiles that fit in a board's row
 BRDHEIGHT equ 8         ; number of tiles that fit in a board's column
 BRDX0     equ ((SCRWIDTH - BRDWIDTH * TILESIZE) / 2)
 BRDY0     equ (SCRHEIGHT - BRDHEIGHT * TILESIZE)
-STDDELAY  equ 1			; standard delay in seconds
+STDDELAY  equ 1         ; standard delay in seconds
 
 NCOLORS   equ 9         ; number of colors used
 TCOLORS   equ 7         ; number of colors used for tile
@@ -84,6 +84,20 @@ proc fillBackground
 
     ret
 endp fillBackground
+
+
+; returns a random color for a tile in eax
+proc randomColor
+    uses ebx, edx
+
+    xor     edx, edx
+    mov     ebx, TCOLORS
+    call    rand
+    div     ebx
+    inc     edx
+    mov     eax, edx
+    ret
+endp randomColor
 
 
 proc drawTile
@@ -216,8 +230,16 @@ proc drawGame
     mov     ecx, SCRWIDTH * SCRHEIGHT / 4
     rep     movsd
 
-	call	displayScore
+    call    displayScore
+
+    cmp     [byte ptr _gameOver], 1
+    je      @@game_over
+
     ret
+
+    @@game_over:
+        call    displayString, offset _gameOverString, 13, 15
+        ret
 endp drawGame
 
 
@@ -248,165 +270,166 @@ proc swapTiles
     mov     dh, [eax]                               ; and the other value
     mov     [eax], dl                               ; swap
     mov     [ebx], dh
-	
+
     call    animateMoves
 
     push    eax
-    call    checkForMatches ; return 0 in eax if no match made
+    call    checkForMatches     ; return 0 in eax if no match made
     cmp     eax, 0
-    je      @@undo_swap     ; in case of no match, move is invalid
+    je      @@undo_swap         ; in case of no match, move is invalid
     pop     eax
+    call    potentialMatches    ; check if there are still valid moves left
     ret
 
     @@undo_swap:
         pop     eax
         mov     [eax], dh   ; restore old value
         mov     [ebx], dl   ; restore old value
-		mov		[byte ptr _delay], 0
+        mov     [byte ptr _delay], 0
         call    animateMoves
-		mov		[byte ptr _delay], STDDELAY
+        mov     [byte ptr _delay], STDDELAY
 
     ret
 endp swapTiles
 
 proc animateMoves
-		
-	call	updateGame
-	call	drawGame
-	call	delay
-	
-	ret
+
+    call    updateGame
+    call    drawGame
+    call    delay
+
+    ret
 
 endp animateMoves
 
 
-proc delay  
-	uses	eax, ecx, edx
-	
-	cmp		[byte ptr _delayActivate], 0
-	je		@@done
+proc delay
+    uses    eax, ecx, edx
 
-	mov		ah, 2ch	; get system time
-	int		21h
-	add		dh, [byte ptr _delay]		; set target second
-	cmp		dh, 60						; does it go past 59
-	jl		$+5							; jump over mod
-	sub		dh, 60						; mod 60
-	mov		[byte ptr _seconds], dh		; save target second
-	
-	@@delaying:   
-	int		21h
-	cmp		dh, [byte ptr _seconds]		; compare new second with target
-	jne		@@delaying					; wait until they are equal
-	
-	@@done:
-	ret
+    cmp     [byte ptr _delayActivate], 0
+    je      @@done
+
+    mov     ah, 2ch ; get system time
+    int     21h
+    add     dh, [byte ptr _delay]       ; set target second
+    cmp     dh, 60                      ; does it go past 59
+    jl      $+5                         ; jump over mod
+    sub     dh, 60                      ; mod 60
+    mov     [byte ptr _seconds], dh     ; save target second
+
+    @@delaying:
+    int     21h
+    cmp     dh, [byte ptr _seconds]     ; compare new second with target
+    jne     @@delaying                  ; wait until they are equal
+
+    @@done:
+    ret
 endp delay
 
 
 proc mouseHandler
     uses    eax, ebx, ecx, edx
-	
-	; check if mouse is in playing field
-    movzx   eax, dx					; copy absolute Y position
-    cmp     eax, BRDY0
-    jl      @@notInField			; skip if above field
-    cmp     eax, BRDY0 + BRDHEIGHT * TILESIZE
-    jge     @@notInField		; skip if below field
 
-    sar     cx, 1					; need to halve absolute X position
+    ; check if mouse is in playing field
+    movzx   eax, dx                 ; copy absolute Y position
+    cmp     eax, BRDY0
+    jl      @@notInField            ; skip if above field
+    cmp     eax, BRDY0 + BRDHEIGHT * TILESIZE
+    jge     @@notInField        ; skip if below field
+
+    sar     cx, 1                   ; need to halve absolute X position
     cmp     cx, BRDX0
-    jl      @@notInField		; skip if left of field, short override because @@notInField is close enough.
+    jl      @@notInField        ; skip if left of field, short override because @@notInField is close enough.
     cmp     cx, BRDX0 + BRDWIDTH * TILESIZE
-    jge     @@notInField		; skip if right of field
+    jge     @@notInField        ; skip if right of field
 
     push    bx              ; save button state until after cursor move
                             ; can't save it before ^^ checks,
                             ; otherwise stack messes up when mouse goes out of field
-	
-	; update _cursorPos with mouse coordinates
-	sub     eax, BRDY0
-	xor     edx, edx
-	mov     ebx, TILESIZE
-	div     ebx
-	mov     [byte ptr _cursorPos + 1], al   ; saves boardCoordinate Y position
-	mov     ax, cx
-	sub     ax, BRDX0
-	xor     edx, edx
-	div     ebx
-	mov     [byte ptr _cursorPos], al       ; saves boardCoordinate X position
-	
-	; swapping or selecting
-	cmp		[byte ptr _moveMode], 0
-	jz		short @@handleClick	; if _moveMode = 0 (selecting) then click will select
-	
-	; swappingTile:			; a tile has been selected, _moveMode = 1 (swapping)
-	mov		ax, [word ptr _cursorPos]
-	mov		bx, [word ptr _selectedTile]
-	sub		al, bl			; relative x coordinate, with bx being the centre now
-	sub		ah, bh			; relative y coordinate
-	
-	push	ax				; save relative coordinates
-	
-	; signX
-	cmp		al, 0			; is x positive
-	jge		@@signY
-	neg		al				; absolute value when x is negative
-	
-	@@signY:
-		cmp		ah, 0
-		jge		@@findMax
-		neg		ah				; absolute value
-		
-	@@findMax:
-		pop		cx				; get back original values
-		cmp		al, ah			; find biggest coordinate
-		jge		@@largestX
-	
-		; largestY
-		mov		bh, 1			; 
-		shr		ch, 7			; find sign of y
-		sub		bh, ch	
-		sub		bh, ch			; subtract sign from 1 twice, if positive, 1-0-0=1, negative, 1-1-1=-1
-		mov		cx, [word ptr _selectedTile]	; get base tile
-		add		ch, bh							; add up or down to it
-		mov		[word ptr _cursorPos], cx		; put it in cursorPos
-		jmp		@@handleClick
-	
-	@@largestX:
-		mov		bl, 1			; 
-		shr		cl, 7			; find sign of x
-		sub		bl, cl	
-		sub		bl, cl			; subtract sign from 1 twice, if positive, 1-0-0=1, negative, 1-1-1=-1
-		mov		cx, [word ptr _selectedTile]	; get base tile
-		add		cl, bl							; add right or left to it
-		mov		[word ptr _cursorPos], cx		; put it in cursorPos
-		jmp		@@handleClick
-		
-	@@handleClick:
-		pop		bx
-		cmp     bl, 1                   ; left-click?
-		jl      @@mouseHandled			; 0, no click
-		jg      @@deselect				; 1+, so deselect
-		cmp		[byte ptr _moveMode], 0	; swap or select?
-		je		@@selectTile
-		call	swapTiles, [word ptr _selectedTile]	; 1, so swap
-		
-	@@deselect:
-		mov     [byte ptr _moveMode], 0	; deselect tile
-		jmp		@@mouseHandled
-		
-	@@selectTile:
+
+    ; update _cursorPos with mouse coordinates
+    sub     eax, BRDY0
+    xor     edx, edx
+    mov     ebx, TILESIZE
+    div     ebx
+    mov     [byte ptr _cursorPos + 1], al   ; saves boardCoordinate Y position
+    mov     ax, cx
+    sub     ax, BRDX0
+    xor     edx, edx
+    div     ebx
+    mov     [byte ptr _cursorPos], al       ; saves boardCoordinate X position
+
+    ; swapping or selecting
+    cmp     [byte ptr _moveMode], 0
+    jz      short @@handleClick ; if _moveMode = 0 (selecting) then click will select
+
+    ; swappingTile:         ; a tile has been selected, _moveMode = 1 (swapping)
+    mov     ax, [word ptr _cursorPos]
+    mov     bx, [word ptr _selectedTile]
+    sub     al, bl          ; relative x coordinate, with bx being the centre now
+    sub     ah, bh          ; relative y coordinate
+
+    push    ax              ; save relative coordinates
+
+    ; signX
+    cmp     al, 0           ; is x positive
+    jge     @@signY
+    neg     al              ; absolute value when x is negative
+
+    @@signY:
+        cmp     ah, 0
+        jge     @@findMax
+        neg     ah              ; absolute value
+
+    @@findMax:
+        pop     cx              ; get back original values
+        cmp     al, ah          ; find biggest coordinate
+        jge     @@largestX
+
+        ; largestY
+        mov     bh, 1           ;
+        shr     ch, 7           ; find sign of y
+        sub     bh, ch
+        sub     bh, ch          ; subtract sign from 1 twice, if positive, 1-0-0=1, negative, 1-1-1=-1
+        mov     cx, [word ptr _selectedTile]    ; get base tile
+        add     ch, bh                          ; add up or down to it
+        mov     [word ptr _cursorPos], cx       ; put it in cursorPos
+        jmp     @@handleClick
+
+    @@largestX:
+        mov     bl, 1           ;
+        shr     cl, 7           ; find sign of x
+        sub     bl, cl
+        sub     bl, cl          ; subtract sign from 1 twice, if positive, 1-0-0=1, negative, 1-1-1=-1
+        mov     cx, [word ptr _selectedTile]    ; get base tile
+        add     cl, bl                          ; add right or left to it
+        mov     [word ptr _cursorPos], cx       ; put it in cursorPos
+        jmp     @@handleClick
+
+    @@handleClick:
+        pop     bx
+        cmp     bl, 1                   ; left-click?
+        jl      @@mouseHandled          ; 0, no click
+        jg      @@deselect              ; 1+, so deselect
+        cmp     [byte ptr _moveMode], 0 ; swap or select?
+        je      @@selectTile
+        call    swapTiles, [word ptr _selectedTile] ; 1, so swap
+
+    @@deselect:
+        mov     [byte ptr _moveMode], 0 ; deselect tile
+        jmp     @@mouseHandled
+
+    @@selectTile:
         call    selectTile
-        mov     [byte ptr _moveMode], 1	; set _moveMode to swapping mode
-		jmp		@@mouseHandled
-		
-	@@mouseHandled:						; since mouseHandler is via an interrupt
-        call    updateGame				; we need to update the game here too
+        mov     [byte ptr _moveMode], 1 ; set _moveMode to swapping mode
+        jmp     @@mouseHandled
+
+    @@mouseHandled:                     ; since mouseHandler is via an interrupt
+        call    updateGame              ; we need to update the game here too
         call    drawGame
-		
-	@@notInField:
-		ret
+
+    @@notInField:
+        ret
 endp mouseHandler
 
 
@@ -430,9 +453,9 @@ proc processUserInput
 
     cmp     ah, 01h     ; ESC scan code
     je      @@done
-	
-	; cmp     ah, 036h	; RSHIFT scan code
-	; je		@@deselect
+
+    ; cmp     ah, 036h  ; RSHIFT scan code
+    ; je        @@deselect
 
     @@continue_game:
         cmp     ah, 039h                ; SPACE scan code
@@ -443,9 +466,9 @@ proc processUserInput
         mov     [byte ptr _moveMode], 0 ; set _moveMode to selecting mode
         xor     al, al
         jmp     short @@done
-    
+
     @@deselect:
-        mov     [byte ptr _moveMode], 0 	; deselect
+        mov     [byte ptr _moveMode], 0     ; deselect
         jmp     short @@done
 
     @@selecting_tile:               ; select the current cursor position
@@ -670,86 +693,246 @@ proc checkForMatches
 endp checkForMatches
 
 
+; transposes the board, used for checking potential matches
+proc transposeBoard
+    uses eax, ebx, ecx, esi, edi
+
+    mov     esi, offset _board
+    mov     edi, offset _transposedBoard
+    mov     ecx, BRDWIDTH / 4
+
+    @@loop:
+        push    edi ; save edi to undo changes while filling a column
+        @@fill_column:
+            lodsd   ; load 4 tiles at once in eax
+            mov     [byte ptr edi + 0 * BRDHEIGHT], al
+            mov     [byte ptr edi + 1 * BRDHEIGHT], ah
+            shr     eax, 16 ; bitshift 16 bits to access the other half of eax
+            mov     [byte ptr edi + 2 * BRDHEIGHT], al
+            mov     [byte ptr edi + 3 * BRDHEIGHT], ah
+            add     edi, BRDHEIGHT * 4
+            dec     ecx
+            jnz     @@fill_column
+        mov     ecx, BRDWIDTH / 4
+        pop     edi
+        inc     edi ; increase edi to fill out the next column
+        cmp     edi, offset _transposedBoard + BRDHEIGHT
+        jl      @@loop
+
+    ret
+endp transposeBoard
+
+
+; checks for patterns that allow a match with a single move
+; call with _board to check each row
+; call with _transposedBoard to check each column of _board
+proc potentialMatchesHelper
+    arg @@board:dword
+    uses ebx, ecx, esi, edi
+
+    mov     esi, [@@board]
+    lea     edi, [esi + 1]
+    mov     ebx, BRDHEIGHT
+    mov     ecx, BRDWIDTH
+
+    ; searches for 2 matching adjacent tiles
+    ; then see if there's a 3rd tile that can be moved to create a match
+    ; only need one, so exit once found
+    @@row_check_1:
+        repne   cmpsb   ; repeat while [esi] & [edi] are not equal
+        cmp     ecx, 0  ; 0 means end of row, go to next
+        je      @@row_next_1
+
+        mov     al, [byte ptr esi]
+
+        ; each test checks if there's a 3rd tile in the data that could
+        ; be used to form a match
+        ; when true, do a bounds check to make sure the move doesn't have
+        ; to cross any borders to form the match
+
+        @@test1:
+        cmp     al, [byte ptr esi + 1 + BRDWIDTH]   ; MM_
+        jne     @@test2                             ; __M
+        cmp     ecx, 1  ; ecx = 1 means we're in last column
+        jne     short @@true
+
+        @@test2:
+        cmp     al, [byte ptr esi + 1 - BRDWIDTH]   ; __M
+        jne     @@test3                             ; MM_
+        cmp     ecx, 1  ; ecx = 1 means we're in last column
+        jne     short @@true
+
+        @@test3:
+        cmp     al, [byte ptr esi + 2]              ; MM_M
+        jne     @@test4
+        cmp     ecx, 2  ; ecx = 2 means we're in penultimate column
+        jg      @@true
+
+        @@test4:
+        cmp     ecx, BRDWIDTH - 1   ; check if we're in 1st column
+        je      @@row_check_1       ; if true, possibilities are exhausted
+
+        cmp     al, [byte ptr esi - 2 + BRDWIDTH]   ; _MM
+        je      @@true                              ; M__
+
+        @@test5:
+        cmp     al, [byte ptr esi - 2 - BRDWIDTH]   ; M__
+        je      @@true                              ; _MM
+
+        @@test6:
+        cmp     al, [byte ptr esi - 3]               ; M_MM
+        jne     @@row_check_1
+        cmp     ecx, BRDWIDTH - 2   ; check if we're in 2nd column
+        jne     @@true
+
+
+    @@row_next_1:
+        mov     ecx, BRDWIDTH
+        dec     ebx
+        jnz     @@row_check_1
+
+
+    ; the next part checks for matches that can be made by
+    ; swapping a tile in between 2 others
+    mov     esi, [@@board]
+    lea     edi, [esi + 2]
+    mov     ebx, BRDHEIGHT
+    mov     ecx, BRDWIDTH
+
+    @@row_check_2:
+        repne   cmpsb
+        cmp     ecx, 0
+        je      @@row_next_2
+
+        mov     al, [byte ptr esi - 1]
+
+        cmp     al, [byte ptr esi + BRDWIDTH]   ; M_M
+        je      @@true                          ; _M_
+
+        cmp     al, [byte ptr esi - BRDWIDTH]   ; _M_
+        je      @@true                          ; M_M
+        jmp     @@row_check_2
+
+    @@row_next_2:
+        dec     ebx
+        mov     ecx, BRDWIDTH
+        jnz     @@row_check_2
+
+    ; getting here means no match was found
+    ; return 0 in al
+    xor     al, al
+    ret
+
+    @@true:
+        mov     al, 1
+        ret
+
+endp potentialMatchesHelper
+
+
+; through the helper, it returns result in al
+; 1 if there's at least one potential match, 0 otherwise
+; 0 potential matches means game over
+proc potentialMatches
+    call    potentialMatchesHelper, offset _board
+    cmp     al, 1
+    je      @@done  ; if first call was successful, we can exit
+    call    transposeBoard
+    call    potentialMatchesHelper, offset _transposedBoard
+    cmp     al, 1
+    je      @@done
+    mov     [byte ptr _gameOver], 1
+
+    @@done:
+        ret
+endp potentialMatches
+
+
 ; collapse tiles so there's no more empty space between them
+; also generates new tiles for places that remain empty
 proc collapseTiles
-    uses    eax, ebx, ecx
+    uses    eax, ebx, esi
 
     call    animateMoves
 
-    mov     ecx, offset _board + BRDWIDTH * BRDHEIGHT
+    mov     esi, offset _board + BRDWIDTH * BRDHEIGHT - 1
+    mov     edi, esi
 
     @@loop:
-        dec     ecx
-        cmp     ecx, offset _board
-        jl      @@done
-        cmp     [byte ptr ecx], 0
-        jne     @@loop
-        lea     ebx, [ecx - BRDWIDTH]
-        @@find_tile_above:
-            cmp     [byte ptr ebx], 0
-            jne     @@collapse
-            lea     ebx, [ebx - BRDWIDTH]
-            jmp     @@find_tile_above
-        @@collapse:
-            mov     ah, [byte ptr ebx]
-            mov     [byte ptr ecx], ah
-            mov     [byte ptr ebx], 0
-            jmp     @@loop
+        cmp     [byte ptr esi], 0
+        je      @@find_tile
+        @@found_tile:
+            dec     esi
+            cmp     esi, offset _board
+            jge     @@loop
+            jmp     @@done
+
+    @@find_tile:
+        mov     ebx, esi
+        sub     ebx, BRDWIDTH
+        cmp     ebx, offset _board
+        jl      @@insert_random_tiles   ; no more tiles, insert new
+        cmp     [byte ptr ebx], 0
+        je      @@find_tile + 2         ; jump back, but skip 1st instruction
+        mov     al, [byte ptr ebx]
+        mov     [byte ptr esi], al
+        mov     [byte ptr ebx], 0
+        jmp     @@found_tile
+
+    ; random tiles are only needed when the top of the column is empty
+    ; this section immediately fills the entire column
+    @@insert_random_tiles:
+        add     ebx, BRDWIDTH
+        call    randomColor
+        mov     [byte ptr ebx], al
+        cmp     ebx, esi
+        jge     @@found_tile            ; entire column has been filled
+        jmp     @@insert_random_tiles
 
     @@done:
-        ;call	animateMoves
-        call	refillDrops
-		mov		[byte ptr _delay], 0
         call    animateMoves
-		mov		[byte ptr _delay], STDDELAY
+        mov     [byte ptr _delay], 0
+        call    animateMoves
+        mov     [byte ptr _delay], 1
         ret
 endp collapseTiles
 
 
-proc refillDrops
-    uses eax, ebx, ecx, edx
-
-    mov     ebx, TCOLORS
-    mov     ecx, offset _drops + BRDWIDTH * BRDHEIGHT
-
-    @@loop:
-        dec     ecx
-        cmp     ecx, offset _drops
-        jl      @@done
-        cmp     [byte ptr ecx], 0
-        jne     @@loop
-        call    rand
-        xor     edx, edx
-        div     ebx                 ; use div to get remainder of eax / 7
-        inc     dl                  ; tile colors are between 1 & 7
-        mov     [byte ptr ecx], dl  ; move value to empty tile
-        jmp     @@loop
-
-    @@done:
-        ret
-endp refillDrops
-
-
-; fills both visible _board & invisible _drops
+; fills board with random tiles
 proc fillBoard
-    uses eax, ebx, ecx, edx, edi
+    uses eax, ebx, ecx, edi
 
-    mov     edi, offset _drops
-    mov     ecx, 2 * BRDWIDTH * BRDHEIGHT
+    mov     edi, offset _board
+    mov     ecx, BRDWIDTH * BRDHEIGHT
     mov     ebx, TCOLORS
 
     @@loop:
-        xor     edx, edx
-        call    rand
-        div     ebx     ; divide to get remainder
-        inc     dl      ; tile colors are between 1 & 7
-        mov     al, dl  ; move remainder to al
-        stosb           ; store value of al into edi
+        call    randomColor ; put a random color in al
+        stosb               ; store value of al into edi
         dec     ecx
         jnz     @@loop
 
     ret
 endp fillBoard
+
+
+proc displayString
+    arg @@string:dword, @@row:byte, @@col:byte
+    uses eax, ebx, ecx, edx, edi
+
+    ;mov     dx, 0201h   ; set cursor position to row 2 & column 1
+    mov     dh, [@@row]
+    mov     dl, [@@col]
+    xor     bx, bx
+    mov     ah, 2h      ; function to set cursor position
+    int     10h         ; video mode interrupt
+
+    mov     edx, [@@string] ; gets the string string
+    mov     ah, 9h          ; function to display string
+    int     21h             ; displays string
+
+    ret
+endp displayString
 
 
 ; displays current score on screen
@@ -846,10 +1029,18 @@ proc main
     call    updateColourPalette
     call    mouse_install, offset mouseHandler
 
+    @@random_game_over:
+
     call    fillBoard
     call    checkForMatches
-    mov     [dword ptr _score], 0   ; reset any score from filling board
-	mov		[byte ptr _delayActivate], 1 ; activate delay
+
+    mov     [byte ptr _gameOver], 0
+    call    potentialMatches
+    cmp     [byte ptr _gameOver], 1
+    je      @@random_game_over              ; no moves possible, redo
+
+    mov     [dword ptr _score], 0           ; reset score from filling board
+    mov     [byte ptr _delayActivate], 1    ; activate delay
 
     @@main_loop:
         call    updateGame
@@ -871,7 +1062,7 @@ dataseg
     _test \
         db 1
         db 1
-	
+
     msg_no_mouse \
         db 'Hij komt hier wel é', 0dh, 0ah, '$'
 
@@ -883,28 +1074,37 @@ dataseg
         db  0
         db  0
 
-	_delay \
-		db STDDELAY
-		
-	_delayActivate \
-		db	0
-		
-	_seconds \
-		db ?
-		
-    _drops \
-        db  (BRDWIDTH * BRDHEIGHT) dup (?)
+    _delay \
+        db STDDELAY
+
+    _delayActivate \
+        db  0
+
+    _seconds \
+        db ?
+
+    _rowBuffer1 \
+        db  BRDWIDTH dup (0)
 
     _board \
         db  (BRDWIDTH * BRDHEIGHT) dup (?)
-        ;db   1,  1,  2,  2,  1,  1,  2,  2  ; row 0
-        ;db   1,  1,  2,  2,  1,  1,  2,  2  ; row 1
-        ;db   4,  3,  1,  1,  3,  3,  1,  1  ; row 2
-        ;db   4,  4,  1,  1,  4,  4,  1,  1  ; row 3
-        ;db   1,  6,  5,  5,  6,  6,  5,  5  ; row 4
-        ;db   6,  6,  5,  5,  6,  6,  5,  5  ; row 5
-        ;db   7,  7,  6,  6,  7,  7,  6,  6  ; row 6
-        ;db   1,  2,  3,  4,  5,  6,  7,  1  ; row 7
+        ;db  1,1,2,2,1,1,2,2
+        ;db  1,1,2,2,1,1,2,2
+        ;db  3,3,4,4,3,3,4,4
+        ;db  3,3,4,4,3,3,4,4
+        ;db  1,1,2,2,5,1,2,2
+        ;db  1,1,2,2,5,1,2,2
+        ;db  3,3,4,5,3,3,4,4
+        ;db  3,3,4,4,3,3,4,4
+
+    _rowBuffer2 \
+        db  BRDWIDTH dup (0)
+
+    _transposedBoard \
+        db  (BRDWIDTH * BRDHEIGHT) dup (8)
+
+    _rowBuffer3 \
+        db  BRDWIDTH dup (0)
 
     _matches \
         db  (BRDWIDTH * BRDHEIGHT) dup (0)
@@ -946,7 +1146,11 @@ dataseg
     _scoreBuffer \
         db  20 dup (?)
 
-    _foo dw 1234
+    _gameOver \
+        db  0
+
+    _gameOverString \
+        db  "GAME OVER", '$'
 
 ; -------------------------------------------------------------------
 ; STACK
