@@ -107,6 +107,18 @@ proc delay
 endp delay
 
 
+proc disableAnimation
+    mov     [byte ptr _delayActivate], 0
+    ret
+endp disableAnimation
+
+
+proc enableAnimation
+    mov     [byte ptr _delayActivate], 1
+    ret
+endp enableAnimation
+
+
 ;;;; uses a delay to animate changes
 proc animateMoves
 
