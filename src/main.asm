@@ -42,7 +42,7 @@ proc getBoardPosition
 endp getBoardPosition
 
 
-;;; call with the point (x:y) of the selected tile
+;;;; call with the point (x:y) of the selected tile
 proc swapTiles
     arg     @@selectedTile: word
     uses    eax, ebx, edx
