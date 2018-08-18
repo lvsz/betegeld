@@ -3,12 +3,14 @@
 ; -------------------------------------------------------------------
 
 ;;;; compile-time constants
-VMEMADR   equ offset _screenBuffer  ; change to 0A0000h to skip buffer
-SCRWIDTH  equ 320       ; screen width in pixels
-SCRHEIGHT equ 200       ; screen height in pixels
-TILESIZE  equ 20        ; tile size in pixels
+VMEMADR     equ offset _screenBuffer    ; change to 0A0000h to skip buffer
+SCRWIDTH    equ 320                     ; screen width in pixels
+SCRHEIGHT   equ 200                     ; screen height in pixels
+TILESIZE    equ 20                      ; tile size in pixels
+STDDELAY    equ 3                       ; standard delay in 1/10th seconds
 
 
+; -------------------------------------------------------------------
 codeseg
 
 ;;; set the video mode
@@ -86,6 +88,33 @@ proc displayScore
 
     ret
 endp displayScore
+
+
+;;;; delay used for animations
+proc delay
+    uses    eax, ecx, edx
+
+    cmp     [byte ptr _delayActivate], 0
+    je      @@done
+
+    mov     ah, 86h
+    movzx   cx, [byte ptr _delay]
+    xor     dx, dx
+    int     15h
+
+    @@done:
+        ret
+endp delay
+
+
+;;;; uses a delay to animate changes
+proc animateMoves
+
+    call    drawGame
+    call    delay
+
+    ret
+endp animateMoves
 
 
 ;;;; fill background with given color
@@ -261,8 +290,15 @@ endp drawGame
 
 ; -------------------------------------------------------------------
 dataseg
+
     _screenBuffer \
         db  (SCRWIDTH * SCRHEIGHT) dup (?)
+
+    _delay \
+        db STDDELAY
+
+    _delayActivate \
+        db  0
 
     _scoreText \
         db  "SCORE: ", '$'

@@ -11,20 +11,19 @@ include "input.asm"
 include "gfx.asm"
 include "colors.asm"
 
-; compile-time constants
+;;;; compile-time constants
 NTILES      equ 7   ; number of types of tiles used
 BRDWIDTH    equ 8   ; number of tiles that fit in a board's row
 BRDHEIGHT   equ 8   ; number of tiles that fit in a board's column
 BRDX0       equ ((SCRWIDTH - BRDWIDTH * TILESIZE) / 2)
 BRDY0       equ (SCRHEIGHT - BRDHEIGHT * TILESIZE)
-STDDELAY    equ 3   ; standard delay in 1/10th seconds
 
 
 ; -------------------------------------------------------------------
 codeseg
 
-;Call with a point (x:y),
-;returns absolute address of its position on the board in eax.
+;;;; call with a point (x:y),
+;;;; returns absolute address of its position on the board in eax.
 proc getBoardPosition
     arg     @@point: word
     uses    edx
@@ -38,7 +37,7 @@ proc getBoardPosition
 endp getBoardPosition
 
 
-;Call with the point (x:y) of the selected tile
+;;; call with the point (x:y) of the selected tile
 proc swapTiles
     arg     @@selectedTile: word
     uses    eax, ebx, edx
@@ -71,31 +70,6 @@ proc swapTiles
 
     ret
 endp swapTiles
-
-
-proc animateMoves
-
-    call    drawGame
-    call    delay
-
-    ret
-endp animateMoves
-
-
-proc delay
-    uses    eax, ecx, edx
-
-    cmp     [byte ptr _delayActivate], 0
-    je      @@done
-
-    mov     ah, 86h
-    movzx   cx, [byte ptr _delay]
-    xor     dx, dx
-    int     15h
-
-    @@done:
-        ret
-endp delay
 
 
 ; adds score for a match based on length and consecutiveness
@@ -523,7 +497,7 @@ proc main
     je @@mouse_present
 
     mov ah, 9
-    mov edx, offset msg_no_mouse
+    mov edx, offset _msg_no_mouse
     int 21h
 
     @@mouse_present:
@@ -558,11 +532,8 @@ endp main
 
 ; -------------------------------------------------------------------
 dataseg
-    _test \
-        db 1
-        db 1
 
-    msg_no_mouse \
+    _msg_no_mouse \
         db 'Hij komt hier wel é', 0dh, 0ah, '$'
 
     _cursorPos \
@@ -571,12 +542,6 @@ dataseg
 
     _selectedTile \
         db  0
-        db  0
-
-    _delay \
-        db STDDELAY
-
-    _delayActivate \
         db  0
 
     _seconds \
