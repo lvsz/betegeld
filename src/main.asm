@@ -403,6 +403,9 @@ proc mouseHandler
         sub     bh, ch          ; subtract sign from 1 twice, if positive, 1-0-0=1, negative, 1-1-1=-1
         mov     cx, [word ptr _selectedTile]    ; get base tile
         add     ch, bh                          ; add up or down to it
+		call	cursorBoundsCheck, cx
+		cmp		al, 0
+		jz		@@handleClick
         mov     [word ptr _cursorPos], cx       ; put it in cursorPos
         jmp     @@handleClick
 
@@ -413,6 +416,9 @@ proc mouseHandler
         sub     bl, cl          ; subtract sign from 1 twice, if positive, 1-0-0=1, negative, 1-1-1=-1
         mov     cx, [word ptr _selectedTile]    ; get base tile
         add     cl, bl                          ; add right or left to it
+		call	cursorBoundsCheck, cx
+		cmp		al, 0
+		jz		@@handleClick
         mov     [word ptr _cursorPos], cx       ; put it in cursorPos
         jmp     @@handleClick
 
@@ -452,6 +458,41 @@ proc selectTile
 endp selectTile
 
 
+proc cursorBoundsCheck
+	arg     @@newCursorPos: word
+    uses    edx
+	
+	xor		al, al			; return value
+	mov		dx, [word ptr @@newCursorPos]
+	
+	cmp     dl, -1          ; check if move would be left of board
+    jne     $+6             ; if not, jump 6 bytes (next check)
+    inc     dl
+    jmp     @@outOfBounds
+    
+    cmp     dl, BRDWIDTH    ; check if move would be right of board
+    jne     $+6             ; if not, jump 6 bytes (next check)
+    dec     dl
+    jmp     @@outOfBounds
+    
+    cmp     dh, -1          ; check if move would be above board
+    jne     $+6             ; if not, jump 6 bytes (next check)
+    inc     dh
+    jmp     @@outOfBounds
+    
+    cmp     dh, BRDHEIGHT	; check if move would be below board
+    jne     @@finish_move   ; if not, jump to finish_move
+    dec     dh
+	
+	@@outOfBounds:
+	ret
+	
+	@@finish_move:
+	mov		al, 1
+	ret
+endp cursorBoundsCheck
+
+
 proc processUserInput
     uses    ebx, edx
 
@@ -480,11 +521,11 @@ proc processUserInput
 
     @@change_color:
         call    changeColorPalette
-        jmp     @@done
+        jmp     short @@done
 
     @@deselect:
         mov     [byte ptr _moveMode], 0 ; deselect
-        jmp     @@done
+        jmp     short @@done
 
     @@selecting_tile:                   ; select the current cursor position
         call    selectTile
@@ -517,28 +558,11 @@ proc processUserInput
         mov     dx, [word ptr offset _selectedTile]
         add     dl, bl
         add     dh, bh
-
-        cmp     dl, -1          ; check if move would be left of board
-        jne     $+6             ; if not, jump 6 bytes (next check)
-        inc     dl
-        jmp     @@finish_move
-
-        cmp     dl, BRDWIDTH    ; check if move would be right of board
-        jne     $+6             ; if not, jump 6 bytes (next check)
-        dec     dl
-        jmp     @@finish_move
-
-        cmp     dh, -1          ; check if move would be above board
-        jne     $+6             ; if not, jump 6 bytes (next check)
-        inc     dh
-        jmp     @@finish_move
-
-        cmp     dh, BRDWIDTH    ; check if move would be below board
-        jne     @@finish_move   ; if not, jump to finish_move
-        dec     dh
-
-        @@finish_move:
-            mov     [word ptr offset _cursorPos], dx
+		
+		call	cursorBoundsCheck, dx
+		cmp		al, 0
+		jz		@@done
+		mov     [word ptr offset _cursorPos], dx
 
     @@done:
         xor     al, al  ; clean up eax before returning
