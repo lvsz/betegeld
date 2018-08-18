@@ -1,3 +1,7 @@
+; -- input.asm ------------------------------------------------------
+; Handles all of the player's input
+; -------------------------------------------------------------------
+
 ;;;; keyboard scan codes uses
 ESCAPE  equ 001h
 SPACE   equ 039h
@@ -188,7 +192,6 @@ proc mouseHandler
         jmp     @@mouseHandled
 
     @@mouseHandled:                     ; since mouseHandler is via an interrupt
-        call    updateGame              ; we need to update the game here too
         call    drawGame
 
     @@notInField:
