@@ -4,7 +4,7 @@
 
 # Settings - Edit the names of the object and executable files.
 objs = rand.obj mouse.obj keyb.obj main.obj
-dest = main.exe
+dest = betegeld.exe
 
 # =============================================================================
 # Do NOT edit this section, unless you know what you are doing.
