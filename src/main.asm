@@ -1,3 +1,7 @@
+; -- main.asm -------------------------------------------------------
+; Main file, deals with initialization & the bulk of game logic
+; -------------------------------------------------------------------
+
 ideal
 P386
 model FLAT, C
@@ -33,6 +37,7 @@ proc getBoardPosition
     mul     edx
     add     al, [byte ptr @@point]          ; adds point's x position
     add     eax, offset _board              ; adds board's offset
+
     ret
 endp getBoardPosition
 
@@ -58,6 +63,7 @@ proc swapTiles
     je      @@undo_swap         ; in case of no match, move is invalid
     pop     eax
     call    potentialMatches    ; check if there are still valid moves left
+
     ret
 
     @@undo_swap:
@@ -73,10 +79,10 @@ endp swapTiles
 
 
 ; adds score for a match based on length and consecutiveness
-; score = (length - 1) * 50 * K, with K the Kth match in a single turn
+;;;; score = (length - 1) * 50 * K, with K the Kth match in a single turn
 proc addScore
-    arg @@length:dword  ; length of match
-    uses eax
+    arg     @@length:dword  ; length of match
+    uses    eax
 
     mov     eax, [dword ptr @@length]
     dec     eax
@@ -88,8 +94,8 @@ proc addScore
 endp addScore
 
 
-; searches for rows with 3+ consecutive tiles of the same color
-; updates score dependent of length of match found
+;;;; searches for rows with 3+ consecutive tiles of the same color
+;;;; updates score dependent of length of match found
 proc matchRows
     uses    ebx, ecx, edi, esi
 
@@ -144,8 +150,8 @@ proc matchRows
 endp matchRows
 
 
-; searches a column with 3+ consecutive tiles of the same color
-; updates score dependent of length of match found
+;;;; searches a column with 3+ consecutive tiles of the same color
+;;;; updates score dependent of length of match found
 proc matchOneColumn
     arg     @@col: dword
     uses    ecx, ebx, edi, esi
@@ -195,9 +201,9 @@ proc matchOneColumn
 endp matchOneColumn
 
 
-; calls matchOneColumn on all columns
+;;;; calls matchOneColumn on all columns
 proc matchColumns
-    uses ebx
+    uses    ebx
 
     xor     ebx, ebx
 
@@ -206,16 +212,17 @@ proc matchColumns
         inc     ebx
         cmp     ebx, BRDWIDTH
         jl      @@loop
+
     ret
 endp matchColumns
 
 
-; Removes found matches from the main board, refills empty spots
-; Stores total number of matches made in eax register
+;;;; Removes found matches from the main board, refills empty spots
+;;;; Stores total number of matches made in eax register
 proc checkForMatches
-    uses ebx, ecx, esi, edi
+    uses    ebx, ecx, esi, edi
 
-    xor eax, eax
+    xor     eax, eax
 
     ; cascade for matching newly dropped tiles
     @@cascade:
@@ -249,9 +256,9 @@ proc checkForMatches
 endp checkForMatches
 
 
-; transposes the board, used for checking potential matches
+;;;; transposes the board, used for checking potential matches
 proc transposeBoard
-    uses eax, ebx, ecx, esi, edi
+    uses    eax, ebx, ecx, esi, edi
 
     mov     esi, offset _board
     mov     edi, offset _transposedBoard
@@ -279,12 +286,12 @@ proc transposeBoard
 endp transposeBoard
 
 
-; checks for patterns that allow a match with a single move
-; call with _board to check each row
-; call with _transposedBoard to check each column of _board
+;;;; checks for patterns that allow a match with a single move
+;;;; call with _board to check each row
+;;;; call with _transposedBoard to check each column of _board
 proc potentialMatchesHelper
-    arg @@board:dword
-    uses ebx, ecx, esi, edi
+    arg     @@board: dword
+    uses    ebx, ecx, esi, edi
 
     mov     esi, [@@board]
     lea     edi, [esi + 1]
@@ -305,6 +312,7 @@ proc potentialMatchesHelper
         ; be used to form a match
         ; when true, do a bounds check to make sure the move doesn't have
         ; to cross any borders to form the match
+        ; due to data layout, only horizontal bounds checking is required
 
         @@test1:
         cmp     al, [byte ptr esi + 1 + BRDWIDTH]   ; MM_
@@ -382,13 +390,12 @@ proc potentialMatchesHelper
     @@true:
         mov     al, 1
         ret
-
 endp potentialMatchesHelper
 
 
-; through the helper, it returns result in al
-; 1 if there's at least one potential match, 0 otherwise
-; 0 potential matches means game over
+;;;; through the helper, it returns result in al
+;;;; 1 if there's at least one potential match, 0 otherwise
+;;;; 0 potential matches means game over
 proc potentialMatches
     call    potentialMatchesHelper, offset _board
     cmp     al, 1
@@ -404,8 +411,8 @@ proc potentialMatches
 endp potentialMatches
 
 
-; collapse tiles so there's no more empty space between them
-; also generates new tiles for places that remain empty
+;;;; collapse tiles so there's no more empty space between them
+;;;; also generates new tiles for places that remain empty
 proc collapseTiles
     uses    eax, ebx, esi
 
@@ -454,9 +461,12 @@ proc collapseTiles
 endp collapseTiles
 
 
-; fills board with random tiles
+;;;; fills board with random tiles
+;;;; should only be used for starting a new game
 proc fillBoard
-    uses eax, ecx, edi
+    uses    eax, ecx, edi
+
+    call    disableAnimation
 
     mov     edi, offset _board
     mov     ecx, BRDWIDTH * BRDHEIGHT
@@ -467,13 +477,18 @@ proc fillBoard
         dec     ecx
         jnz     @@loop
 
+    call    checkForMatches
+    mov     [dword ptr _score], 0   ; reset any score from filling board
+
+    call    enableAnimation
+
     ret
 endp fillBoard
 
 
-; Terminate the program.
+;;;; terminate the program.
 proc terminateProcess
-    uses eax
+    uses    eax
 
     call    setVideoMode, 03h
     mov     ax, 04C00h
@@ -509,15 +524,11 @@ proc main
     @@random_game_over:
 
     call    fillBoard
-    call    checkForMatches
 
     mov     [byte ptr _gameOver], 0
     call    potentialMatches
     cmp     [byte ptr _gameOver], 1
     je      @@random_game_over              ; no moves possible, redo
-
-    mov     [dword ptr _score], 0           ; reset score from filling board
-    mov     [byte ptr _delayActivate], 1    ; activate delay
 
     @@main_loop:
         call    drawGame
@@ -536,29 +547,30 @@ dataseg
     _msg_no_mouse \
         db 'Hij komt hier wel é', 0dh, 0ah, '$'
 
+    ; set default cursor position in the middle
     _cursorPos \
         db  BRDWIDTH / 2 - 1
         db  BRDHEIGHT / 2 - 1
 
     _selectedTile \
-        db  0
-        db  0
+        db  ?   ; x coordinate
+        db  ?   ; y coordinate
 
-    _seconds \
-        db ?
-
+    ; rowBuffers are used during potential match checking
+    ; removing the need to do vertical bounds checking
     _rowBuffer1 \
         db  BRDWIDTH dup (0)
 
     _board \
         db  (BRDWIDTH * BRDHEIGHT) dup (?)
+        ; "game over" board for testing purposes
         ;db  1,1,2,2,1,1,2,2
         ;db  1,1,2,2,1,1,2,2
         ;db  3,3,4,4,3,3,4,4
         ;db  3,3,4,4,3,3,4,4
-        ;db  1,1,2,2,5,1,2,2
-        ;db  1,1,2,2,5,1,2,2
-        ;db  3,3,4,5,3,3,4,4
+        ;db  1,1,2,2,1,1,2,2
+        ;db  1,1,2,2,1,1,2,2
+        ;db  3,3,4,4,3,3,4,4
         ;db  3,3,4,4,3,3,4,4
 
     _rowBuffer2 \
@@ -588,6 +600,6 @@ dataseg
 ; -------------------------------------------------------------------
 ; STACK
 ; -------------------------------------------------------------------
-stack 2000h
+stack 1024h
 
 end main
