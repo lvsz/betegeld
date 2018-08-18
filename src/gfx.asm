@@ -24,6 +24,70 @@ proc setVideoMode
 endp setVideoMode
 
 
+;;;; displays a given string on a given row & column
+proc displayString
+    arg @@string:dword, @@row:byte, @@col:byte
+    uses eax, ebx, ecx, edx, edi
+
+    mov     dh, [@@row]
+    mov     dl, [@@col]
+    xor     bx, bx
+    mov     ah, 2h      ; function to set cursor position
+    int     10h         ; video mode interrupt
+
+    mov     edx, [@@string] ; gets the string string
+    mov     ah, 9h          ; function to display string
+    int     21h             ; displays string
+
+    ret
+endp displayString
+
+
+;;;; displays current score on screen
+proc displayScore
+    uses eax, ebx, ecx, edx, edi
+
+    mov     dx, 0101h   ; set cursor position to row 1 & column 1
+    xor     bx, bx
+    mov     ah, 2h      ; function to set cursor position
+    int     10h         ; video mode interrupt
+
+    mov     edx, offset _scoreText  ; gets the "SCORE: " string
+    mov     ah, 9h                  ; function to display string
+    int     21h                     ; displays string
+
+    mov     eax, [dword ptr _score]
+    mov     ebx, 10
+    xor     ecx, ecx
+
+    ; integers gets processed from lowest to highest significant figure
+    ; so put on stack to display eventual string correctly later
+    @@put_digits_on_stack:
+        xor     edx, edx
+        div     ebx         ; divide eax by ebx, with remainder stored in edx
+        add     edx, '0'    ; turn digit into char by adding char code of '0'
+        push    edx         ; put on stack for later
+        inc     ecx
+        cmp     eax, 0
+        jne     @@put_digits_on_stack
+
+    mov     edi, offset _scoreBuffer    ; set destination to buffer
+
+    @@pop_digits_from_stack:
+        pop     eax
+        stosb                           ; store value of eax in buffer
+        dec     ecx
+        jnz     @@pop_digits_from_stack
+
+    mov     [dword ptr edi], '$'        ; mark end of string
+    mov     edx, offset _scoreBuffer
+    mov     ah, 9h                      ; function to display string
+    int     21h
+
+    ret
+endp displayScore
+
+
 ;;;; fill background with given color
 proc fillBackground
     arg     @@color: byte
@@ -193,4 +257,18 @@ proc drawGame
         call    displayString, offset _gameOverString, 13, 15
         ret
 endp drawGame
+
+
+; -------------------------------------------------------------------
+dataseg
+    _screenBuffer \
+        db  (SCRWIDTH * SCRHEIGHT) dup (?)
+
+    _scoreText \
+        db  "SCORE: ", '$'
+
+    _gameOverString \
+        db  "GAME OVER", '$'
+
+; -------------------------------------------------------------------
 
