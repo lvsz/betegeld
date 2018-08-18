@@ -15,6 +15,7 @@ dest = betegeld.exe
 
 $(dest): $(objs)
   wlink option quiet system pmodew name $@ file {$(objs)}
+  echo Destination:       $(dest)
 
 clean: .symbolic
   del *.obj
