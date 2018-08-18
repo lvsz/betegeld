@@ -12,6 +12,7 @@ UP      equ 048h
 DOWN    equ 050h
 
 
+; -------------------------------------------------------------------
 codeseg
 
 ;;;; process input from the keyboard
@@ -243,4 +244,23 @@ proc cursorBoundsCheck
         mov		al, 1   ; return 1 (valid)
         ret
 endp cursorBoundsCheck
+
+
+; -------------------------------------------------------------------
+dataseg
+    ; indices based on keyboard scan codes
+    _moves \
+        dw  72 dup (?)
+        dw  0ff00h      ; move up
+        dw  2 dup (?)
+        dw  000ffh      ; move left
+        dw  (?)
+        dw  00001h      ; move right
+        dw  2 dup (?)
+        dw  00100h      ; move down
+
+    _moveMode \
+        db  0
+
+; -------------------------------------------------------------------
 
