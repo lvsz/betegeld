@@ -7,7 +7,7 @@ VMEMADR     equ offset _screenBuffer    ; change to 0A0000h to skip buffer
 SCRWIDTH    equ 320                     ; screen width in pixels
 SCRHEIGHT   equ 200                     ; screen height in pixels
 TILESIZE    equ 20                      ; tile size in pixels
-STDDELAY    equ 3                       ; standard delay in 1/10th seconds
+STDDELAY    equ 3                       ; standard delay in 2^16 microseconds
 
 
 ; -------------------------------------------------------------------
@@ -97,7 +97,7 @@ proc delay
     cmp     [byte ptr _delayActivate], 0
     je      @@done
 
-    mov     ah, 86h
+    mov     ax, 8600h   ; set ah to 86h, al to 0 for potential DOSBox bugs
     movzx   cx, [byte ptr _delay]
     xor     dx, dx
     int     15h
