@@ -1,5 +1,3 @@
-codeseg
-
 ;;;; keyboard scan codes uses
 ESCAPE  equ 001h
 SPACE   equ 039h
@@ -8,6 +6,9 @@ LEFT    equ 04Bh
 RIGHT   equ 04Dh
 UP      equ 048h
 DOWN    equ 050h
+
+
+codeseg
 
 ;;;; process input from the keyboard
 proc processUserInput
