@@ -78,7 +78,7 @@ proc swapTiles
 endp swapTiles
 
 
-; adds score for a match based on length and consecutiveness
+;;;; adds score for a match based on length and consecutiveness
 ;;;; score = (length - 1) * 50 * K, with K the Kth match in a single turn
 proc addScore
     arg     @@length:dword  ; length of match
@@ -298,6 +298,8 @@ proc potentialMatchesHelper
     mov     ebx, BRDHEIGHT
     mov     ecx, BRDWIDTH
 
+    push    esi
+
     ; searches for 2 matching adjacent tiles
     ; then see if there's a 3rd tile that can be moved to create a match
     ; only need one, so exit once found
@@ -318,7 +320,7 @@ proc potentialMatchesHelper
         cmp     al, [byte ptr esi + 1 + BRDWIDTH]   ; MM_
         jne     @@test2                             ; __M
         cmp     ecx, 1  ; ecx = 1 means we're in last column
-        jne     short @@true
+        jne     @@true
 
         @@test2:
         cmp     al, [byte ptr esi + 1 - BRDWIDTH]   ; __M
@@ -351,10 +353,17 @@ proc potentialMatchesHelper
 
 
     @@row_next_1:
+        pop     esi
+        add     esi, BRDWIDTH
+        lea     edi, [esi + 1]
+        push    esi
         mov     ecx, BRDWIDTH
         dec     ebx
         jnz     @@row_check_1
 
+
+    ; empty stack
+    pop     esi
 
     ; the next part checks for matches that can be made by
     ; swapping a tile in between 2 others
@@ -362,6 +371,8 @@ proc potentialMatchesHelper
     lea     edi, [esi + 2]
     mov     ebx, BRDHEIGHT
     mov     ecx, BRDWIDTH
+
+    push    esi
 
     @@row_check_2:
         repne   cmpsb
@@ -378,9 +389,16 @@ proc potentialMatchesHelper
         jmp     @@row_check_2
 
     @@row_next_2:
+        pop     esi
+        add     esi, BRDWIDTH
+        lea     edi, [esi + 2]
+        push    esi
         dec     ebx
         mov     ecx, BRDWIDTH
         jnz     @@row_check_2
+
+    ; empty stack
+    pop     esi
 
     ; getting here means no match was found
     ; return 0 in al
@@ -388,6 +406,7 @@ proc potentialMatchesHelper
     ret
 
     @@true:
+        pop     esi ; empty stack
         mov     al, 1
         ret
 endp potentialMatchesHelper
@@ -498,6 +517,7 @@ proc terminateProcess
 endp terminateProcess
 
 
+;;;; the main function that gets everything going
 proc main
     sti
     cld
@@ -528,7 +548,7 @@ proc main
     mov     [byte ptr _gameOver], 0
     call    potentialMatches
     cmp     [byte ptr _gameOver], 1
-    je      @@random_game_over              ; no moves possible, redo
+    je      @@random_game_over      ; no moves possible, redo
 
     @@main_loop:
         call    drawGame
@@ -563,15 +583,6 @@ dataseg
 
     _board \
         db  (BRDWIDTH * BRDHEIGHT) dup (?)
-        ; "game over" board for testing purposes
-        ;db  1,1,2,2,1,1,2,2
-        ;db  1,1,2,2,1,1,2,2
-        ;db  3,3,4,4,3,3,4,4
-        ;db  3,3,4,4,3,3,4,4
-        ;db  1,1,2,2,1,1,2,2
-        ;db  1,1,2,2,1,1,2,2
-        ;db  3,3,4,4,3,3,4,4
-        ;db  3,3,4,4,3,3,4,4
 
     _rowBuffer2 \
         db  BRDWIDTH dup (0)
