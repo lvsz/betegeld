@@ -332,7 +332,7 @@ proc potentialMatchesHelper
         cmp     al, [byte ptr esi + 2]              ; MM_M
         jne     @@test4
         cmp     ecx, 2  ; ecx = 2 means we're in penultimate column
-        jg      @@true
+        jg      short @@true
 
         @@test4:
         cmp     ecx, BRDWIDTH - 1   ; check if we're in 1st column
