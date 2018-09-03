@@ -145,8 +145,8 @@ proc matchRows
             mov     ecx, ebx
             jmp     @@loop
 
-        @@done:
-            ret
+    @@done:
+        ret
 endp matchRows
 
 
@@ -317,39 +317,39 @@ proc potentialMatchesHelper
         ; due to data layout, only horizontal bounds checking is required
 
         @@test1:
-        cmp     al, [byte ptr esi + 1 + BRDWIDTH]   ; MM_
-        jne     @@test2                             ; __M
-        cmp     ecx, 1  ; ecx = 1 means we're in last column
-        jne     @@true
+            cmp     al, [byte ptr esi + 1 + BRDWIDTH]   ; MM_
+            jne     @@test2                             ; __M
+            cmp     ecx, 1  ; ecx = 1 means we're in last column
+            jne     @@true
 
         @@test2:
-        cmp     al, [byte ptr esi + 1 - BRDWIDTH]   ; __M
-        jne     @@test3                             ; MM_
-        cmp     ecx, 1  ; ecx = 1 means we're in last column
-        jne     short @@true
+            cmp     al, [byte ptr esi + 1 - BRDWIDTH]   ; __M
+            jne     @@test3                             ; MM_
+            cmp     ecx, 1  ; ecx = 1 means we're in last column
+            jne     short @@true
 
         @@test3:
-        cmp     al, [byte ptr esi + 2]              ; MM_M
-        jne     @@test4
-        cmp     ecx, 2  ; ecx = 2 means we're in penultimate column
-        jg      short @@true
+            cmp     al, [byte ptr esi + 2]              ; MM_M
+            jne     @@test4
+            cmp     ecx, 2  ; ecx = 2 means we're in penultimate column
+            jg      short @@true
 
         @@test4:
-        cmp     ecx, BRDWIDTH - 1   ; check if we're in 1st column
-        je      @@row_check_1       ; if true, possibilities are exhausted
+            cmp     ecx, BRDWIDTH - 1   ; check if we're in 1st column
+            je      @@row_check_1       ; if true, possibilities are exhausted
 
-        cmp     al, [byte ptr esi - 2 + BRDWIDTH]   ; _MM
-        je      @@true                              ; M__
+            cmp     al, [byte ptr esi - 2 + BRDWIDTH]   ; _MM
+            je      @@true                              ; M__
 
         @@test5:
-        cmp     al, [byte ptr esi - 2 - BRDWIDTH]   ; M__
-        je      @@true                              ; _MM
+            cmp     al, [byte ptr esi - 2 - BRDWIDTH]   ; M__
+            je      @@true                              ; _MM
 
         @@test6:
-        cmp     al, [byte ptr esi - 3]               ; M_MM
-        jne     @@row_check_1
-        cmp     ecx, BRDWIDTH - 2   ; check if we're in 2nd column
-        jne     @@true
+            cmp     al, [byte ptr esi - 3]               ; M_MM
+            jne     @@row_check_1
+            cmp     ecx, BRDWIDTH - 2   ; check if we're in 2nd column
+            jne     @@true
 
 
     @@row_next_1:
@@ -491,8 +491,8 @@ proc fillBoard
     mov     ecx, BRDWIDTH * BRDHEIGHT
 
     @@loop:
-        call    randomTileColor ; put a random color in al
-        stosb                   ; store value of al into edi
+        call    randomTileColor     ; put a random color in al
+        stosb                       ; store value of al into edi
         dec     ecx
         jnz     @@loop
 
@@ -525,21 +525,10 @@ proc main
     push    ds
     pop     es
 
-    call rand_init
-
-    call mouse_present
-    cmp eax, 1
-    je @@mouse_present
-
-    mov ah, 9
-    mov edx, offset _msg_no_mouse
-    int 21h
-
-    @@mouse_present:
-
     call    setVideoMode, 13h
     call    updateColorPalette
     call    mouse_install, offset mouseHandler
+    call    rand_init
 
     @@random_game_over:
 
@@ -564,9 +553,6 @@ endp main
 ; -------------------------------------------------------------------
 dataseg
 
-    _msg_no_mouse \
-        db 'Hij komt hier wel é', 0dh, 0ah, '$'
-
     ; set default cursor position in the middle
     _cursorPos \
         db  BRDWIDTH / 2 - 1
@@ -576,21 +562,21 @@ dataseg
         db  ?   ; x coordinate
         db  ?   ; y coordinate
 
-    ; rowBuffers are used during potential match checking
+    ; boardBuffers are used during potential match checking
     ; removing the need to do vertical bounds checking
-    _rowBuffer1 \
+    _boardBuffer1 \
         db  BRDWIDTH dup (0)
 
     _board \
         db  (BRDWIDTH * BRDHEIGHT) dup (?)
 
-    _rowBuffer2 \
+    _boardBuffer2 \
         db  BRDWIDTH dup (0)
 
     _transposedBoard \
         db  (BRDWIDTH * BRDHEIGHT) dup (8)
 
-    _rowBuffer3 \
+    _boardBuffer3 \
         db  BRDWIDTH dup (0)
 
     _matches \
